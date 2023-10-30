@@ -1,3 +1,9 @@
+use egui_plotter::EguiBackend;
+use plotters::prelude::*;
+const MOVE_SCALE: f32 = 0.01;
+const SCROLL_SCALE: f32 = 0.001;
+use eframe::egui;
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -7,6 +13,12 @@ pub struct TemplateApp {
 
     #[serde(skip)] // This how you opt-out of serialization of a field
     value: f32,
+
+    chart_pitch: f32,
+    chart_yaw: f32,
+    chart_scale: f32,
+    chart_pitch_vel: f32,
+    chart_yaw_vel: f32,
 }
 
 impl Default for TemplateApp {
@@ -15,6 +27,11 @@ impl Default for TemplateApp {
             // Example stuff:
             label: "Hello World!".to_owned(),
             value: 2.7,
+            chart_pitch: 0.3,
+            chart_yaw: 0.9,
+            chart_scale: 0.9,
+            chart_pitch_vel: 0.0,
+            chart_yaw_vel: 0.0,
         }
     }
 }
@@ -63,8 +80,7 @@ impl eframe::App for TemplateApp {
                 egui::widgets::global_dark_light_mode_buttons(ui);
             });
         });
-
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::SidePanel::left("info").show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("eframe template");
 
@@ -88,6 +104,109 @@ impl eframe::App for TemplateApp {
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 powered_by_egui_and_eframe(ui);
                 egui::warn_if_debug_build(ui);
+            });
+        });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            egui::Window::new("test").show(ctx, |ui| {
+                // First, get mouse data
+                let (pitch_delta, yaw_delta, scale_delta) = ui.input(|input| {
+                    let pointer = &input.pointer;
+                    let delta = pointer.delta();
+
+                    let (pitch_delta, yaw_delta) = match pointer.primary_down() {
+                        true => (delta.y * MOVE_SCALE, -delta.x * MOVE_SCALE),
+                        false => (self.chart_pitch_vel, self.chart_yaw_vel),
+                    };
+
+                    let scale_delta = input.scroll_delta.y * SCROLL_SCALE;
+
+                    (pitch_delta, yaw_delta, scale_delta)
+                });
+
+                self.chart_pitch_vel = pitch_delta;
+                self.chart_yaw_vel = yaw_delta;
+
+                self.chart_pitch += self.chart_pitch_vel;
+                self.chart_yaw += self.chart_yaw_vel;
+                self.chart_scale += scale_delta;
+
+                // Next plot everything
+                let root = EguiBackend::new(ui).into_drawing_area();
+
+                root.fill(&WHITE).unwrap();
+
+                let x_axis = (-3.0..3.0).step(0.1);
+                let z_axis = (-3.0..3.0).step(0.1);
+
+                let mut chart = ChartBuilder::on(&root)
+                    .caption(format!("3D Plot Test"), (FontFamily::SansSerif, 20))
+                    .build_cartesian_3d(x_axis, -3.0..3.0, z_axis)
+                    .unwrap();
+
+                chart.with_projection(|mut pb| {
+                    pb.yaw = self.chart_yaw as f64;
+                    pb.pitch = self.chart_pitch as f64;
+                    pb.scale = self.chart_scale as f64;
+                    pb.into_matrix()
+                });
+
+                chart
+                    .configure_axes()
+                    .light_grid_style(BLACK.mix(0.15))
+                    .max_light_lines(3)
+                    .draw()
+                    .unwrap();
+
+                chart
+                    .draw_series(
+                        SurfaceSeries::xoz(
+                            (-30..30).map(|f| f as f64 / 10.0),
+                            (-30..30).map(|f| f as f64 / 10.0),
+                            |x, z| (x * x + z * z).cos(),
+                        )
+                        .style(BLUE.mix(0.2).filled()),
+                    )
+                    .unwrap()
+                    .label("Surface")
+                    .legend(|(x, y)| {
+                        Rectangle::new([(x + 5, y - 5), (x + 15, y + 5)], BLUE.mix(0.5).filled())
+                    });
+
+                chart
+                    .draw_series(LineSeries::new(
+                        (-100..100)
+                            .map(|y| y as f64 / 40.0)
+                            .map(|y| ((y * 10.0).sin(), y, (y * 10.0).cos())),
+                        &BLACK,
+                    ))
+                    .unwrap()
+                    .label("Line")
+                    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], BLACK));
+
+                chart
+                    .configure_series_labels()
+                    .border_style(BLACK)
+                    .draw()
+                    .unwrap();
+
+                root.present().unwrap();
+            });
+            egui::Grid::new("some_unique_id").show(ui, |ui| {
+                ui.label("First row, first column");
+                ui.label("First row, second column");
+                ui.end_row();
+
+                ui.label("Second row, second column");
+                ui.label("Second row, third column");
+                ui.end_row();
+
+                ui.horizontal(|ui| {
+                    ui.label("Same");
+                    ui.label("cell");
+                });
+                ui.label("Third row, second column");
+                ui.end_row();
             });
         });
     }
