@@ -1,5 +1,5 @@
-use egui_plotter::EguiBackend;
-use plotters::prelude::*;
+//use egui_plotter::EguiBackend;
+//use plotters::prelude::*;
 const MOVE_SCALE: f32 = 0.01;
 const SCROLL_SCALE: f32 = 0.001;
 use eframe::egui;
@@ -108,105 +108,111 @@ impl eframe::App for TemplateApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::Window::new("test").show(ctx, |ui| {
-                // First, get mouse data
-                let (pitch_delta, yaw_delta, scale_delta) = ui.input(|input| {
-                    let pointer = &input.pointer;
-                    let delta = pointer.delta();
+            /*
+                        egui::Window::new("test").show(ctx, |ui| {
+                            // First, get mouse data
+                            let (pitch_delta, yaw_delta, scale_delta) = ui.input(|input| {
+                                let pointer = &input.pointer;
+                                let delta = pointer.delta();
 
-                    let (pitch_delta, yaw_delta) = match pointer.primary_down() {
-                        true => (delta.y * MOVE_SCALE, -delta.x * MOVE_SCALE),
-                        false => (self.chart_pitch_vel, self.chart_yaw_vel),
-                    };
+                                let (pitch_delta, yaw_delta) = match pointer.primary_down() {
+                                    true => (delta.y * MOVE_SCALE, -delta.x * MOVE_SCALE),
+                                    false => (self.chart_pitch_vel, self.chart_yaw_vel),
+                                };
 
-                    let scale_delta = input.scroll_delta.y * SCROLL_SCALE;
+                                let scale_delta = input.scroll_delta.y * SCROLL_SCALE;
 
-                    (pitch_delta, yaw_delta, scale_delta)
-                });
+                                (pitch_delta, yaw_delta, scale_delta)
+                            });
 
-                self.chart_pitch_vel = pitch_delta;
-                self.chart_yaw_vel = yaw_delta;
+                            self.chart_pitch_vel = pitch_delta;
+                            self.chart_yaw_vel = yaw_delta;
 
-                self.chart_pitch += self.chart_pitch_vel;
-                self.chart_yaw += self.chart_yaw_vel;
-                self.chart_scale += scale_delta;
+                            self.chart_pitch += self.chart_pitch_vel;
+                            self.chart_yaw += self.chart_yaw_vel;
+                            self.chart_scale += scale_delta;
 
-                // Next plot everything
-                let root = EguiBackend::new(ui).into_drawing_area();
+                            // Next plot everything
+                            let root = EguiBackend::new(ui).into_drawing_area();
 
-                root.fill(&WHITE).unwrap();
+                            root.fill(&WHITE).unwrap();
 
-                let x_axis = (-3.0..3.0).step(0.1);
-                let z_axis = (-3.0..3.0).step(0.1);
+                            let x_axis = (-3.0..3.0).step(0.1);
+                            let z_axis = (-3.0..3.0).step(0.1);
 
-                let mut chart = ChartBuilder::on(&root)
-                    .caption(format!("3D Plot Test"), (FontFamily::SansSerif, 20))
-                    .build_cartesian_3d(x_axis, -3.0..3.0, z_axis)
-                    .unwrap();
+                            let mut chart = ChartBuilder::on(&root)
+                                .caption(format!("3D Plot Test"), (FontFamily::SansSerif, 20))
+                                .build_cartesian_3d(x_axis, -3.0..3.0, z_axis)
+                                .unwrap();
 
-                chart.with_projection(|mut pb| {
-                    pb.yaw = self.chart_yaw as f64;
-                    pb.pitch = self.chart_pitch as f64;
-                    pb.scale = self.chart_scale as f64;
-                    pb.into_matrix()
-                });
+                            chart.with_projection(|mut pb| {
+                                pb.yaw = self.chart_yaw as f64;
+                                pb.pitch = self.chart_pitch as f64;
+                                pb.scale = self.chart_scale as f64;
+                                pb.into_matrix()
+                            });
 
-                chart
-                    .configure_axes()
-                    .light_grid_style(BLACK.mix(0.15))
-                    .max_light_lines(3)
-                    .draw()
-                    .unwrap();
+                            chart
+                                .configure_axes()
+                                .light_grid_style(BLACK.mix(0.15))
+                                .max_light_lines(3)
+                                .draw()
+                                .unwrap();
 
-                chart
-                    .draw_series(
-                        SurfaceSeries::xoz(
-                            (-30..30).map(|f| f as f64 / 10.0),
-                            (-30..30).map(|f| f as f64 / 10.0),
-                            |x, z| (x * x + z * z).cos(),
-                        )
-                        .style(BLUE.mix(0.2).filled()),
-                    )
-                    .unwrap()
-                    .label("Surface")
-                    .legend(|(x, y)| {
-                        Rectangle::new([(x + 5, y - 5), (x + 15, y + 5)], BLUE.mix(0.5).filled())
+                            chart
+                                .draw_series(
+                                    SurfaceSeries::xoz(
+                                        (-30..30).map(|f| f as f64 / 10.0),
+                                        (-30..30).map(|f| f as f64 / 10.0),
+                                        |x, z| (x * x + z * z).cos(),
+                                    )
+                                    .style(BLUE.mix(0.2).filled()),
+                                )
+                                .unwrap()
+                                .label("Surface")
+                                .legend(|(x, y)| {
+                                    Rectangle::new([(x + 5, y - 5), (x + 15, y + 5)], BLUE.mix(0.5).filled())
+                                });
+
+                            chart
+                                .draw_series(LineSeries::new(
+                                    (-100..100)
+                                        .map(|y| y as f64 / 40.0)
+                                        .map(|y| ((y * 10.0).sin(), y, (y * 10.0).cos())),
+                                    &BLACK,
+                                ))
+                                .unwrap()
+                                .label("Line")
+                                .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], BLACK));
+
+                            chart
+                                .configure_series_labels()
+                                .border_style(BLACK)
+                                .draw()
+                                .unwrap();
+
+                            root.present().unwrap();
+                        });
+            */
+            egui::Window::new("test2").show(ctx, |ui| {
+                let mut plot = egui_plot::Plot::new("lines_demo")
+                    .legend(egui_plot::Legend::default())
+                    .y_axis_width(4)
+                    .show_axes(true)
+                    .show_grid(true);
+                plot.show(ui, |plot_ui| {
+                    plot_ui.line({
+                        let time: f64 = 0.0;
+                        egui_plot::Line::new(egui_plot::PlotPoints::from_explicit_callback(
+                            move |x| 0.5 * (2.0 * x).sin() * time.sin(),
+                            ..,
+                            512,
+                        ))
+                        //                        .color(Color32::from_rgb(200, 100, 100))
+                        //                       .style(self.line_style)
+                        .name("wave")
                     });
-
-                chart
-                    .draw_series(LineSeries::new(
-                        (-100..100)
-                            .map(|y| y as f64 / 40.0)
-                            .map(|y| ((y * 10.0).sin(), y, (y * 10.0).cos())),
-                        &BLACK,
-                    ))
-                    .unwrap()
-                    .label("Line")
-                    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], BLACK));
-
-                chart
-                    .configure_series_labels()
-                    .border_style(BLACK)
-                    .draw()
-                    .unwrap();
-
-                root.present().unwrap();
-            });
-            egui::Grid::new("some_unique_id").show(ui, |ui| {
-                ui.label("First row, first column");
-                ui.label("First row, second column");
-                ui.end_row();
-
-                ui.label("Second row, second column");
-                ui.label("Second row, third column");
-                ui.end_row();
-
-                ui.horizontal(|ui| {
-                    ui.label("Same");
-                    ui.label("cell");
-                });
-                ui.label("Third row, second column");
-                ui.end_row();
+                })
             });
         });
     }
