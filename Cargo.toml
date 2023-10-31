@@ -7,6 +7,7 @@ rust-version = "1.71"
 
 
 [dependencies]
+polars = { version = "0.25.1", features = ["lazy"] }
 egui_plot = { version = "0.23.0" }
 #egui-plotter = "0.3.0"
 #plotters = "0.3.3"

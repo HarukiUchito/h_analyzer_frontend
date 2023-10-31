@@ -3,7 +3,7 @@
 const MOVE_SCALE: f32 = 0.01;
 const SCROLL_SCALE: f32 = 0.001;
 use eframe::egui;
-
+use polars::prelude::*;
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -19,6 +19,7 @@ pub struct TemplateApp {
     chart_scale: f32,
     chart_pitch_vel: f32,
     chart_yaw_vel: f32,
+    organized: bool,
 }
 
 impl Default for TemplateApp {
@@ -32,6 +33,7 @@ impl Default for TemplateApp {
             chart_scale: 0.9,
             chart_pitch_vel: 0.0,
             chart_yaw_vel: 0.0,
+            organized: false,
         }
     }
 }
@@ -90,8 +92,10 @@ impl eframe::App for TemplateApp {
             });
 
             ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                self.value += 1.0;
+            if ui.button("Load File").clicked() {
+                log::info!("button");
+                let df = LazyCsvReader::new(Path::new("docs/data/path.csv")).unwrap().finish().unwrap();
+                println!("{:?}", df.collect().unwrap());
             }
 
             ui.separator();
@@ -108,6 +112,9 @@ impl eframe::App for TemplateApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            egui::Window::new("test3").show(ctx, |ui| {
+
+            });
             /*
                         egui::Window::new("test").show(ctx, |ui| {
                             // First, get mouse data
@@ -202,7 +209,7 @@ impl eframe::App for TemplateApp {
                     .show_grid(true);
                 plot.show(ui, |plot_ui| {
                     plot_ui.line({
-                        let time: f64 = 0.0;
+                        let time: f64 = 1.0;
                         egui_plot::Line::new(egui_plot::PlotPoints::from_explicit_callback(
                             move |x| 0.5 * (2.0 * x).sin() * time.sin(),
                             ..,
@@ -214,6 +221,14 @@ impl eframe::App for TemplateApp {
                     });
                 })
             });
+            egui::Window::new("test5").show(ctx, |ui| {
+
+            });
+            if !self.organized {
+                // organize windows
+                ui.memory_mut(|mem| mem.reset_areas());
+                self.organized = true;
+            }
         });
     }
 }
