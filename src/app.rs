@@ -1,3 +1,28 @@
+use hello_world::greeter_client::GreeterClient;
+
+pub mod hello_world {
+    tonic::include_proto!("helloworld");
+}
+
+use serde_derive::{Deserialize, Serialize};
+use std::sync::mpsc::{Receiver, Sender};
+
+use poll_promise::Promise;
+fn send_req() -> Promise<Result<tonic::Response<hello_world::HelloReply>, tonic::Status>> {
+    log::info!("async!");
+    Promise::spawn_local(async move {
+        let base_url = "http://192.168.64.2:50051"; // URL of the gRPC-web server
+        use tonic_web_wasm_client::Client;
+        let mut query_client = GreeterClient::new(Client::new(base_url.to_string()));
+        let request = tonic::Request::new(hello_world::HelloRequest {
+            name: "Tonic".into(),
+        });
+
+        let resp = query_client.say_hello(request).await;
+        resp
+    })
+}
+
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
 const MOVE_SCALE: f32 = 0.01;
@@ -20,6 +45,9 @@ pub struct TemplateApp {
     chart_pitch_vel: f32,
     chart_yaw_vel: f32,
     organized: bool,
+
+    #[serde(skip)]
+    hello_promise: Option<Promise<Result<tonic::Response<hello_world::HelloReply>, tonic::Status>>>,
 }
 
 impl Default for TemplateApp {
@@ -34,6 +62,7 @@ impl Default for TemplateApp {
             chart_pitch_vel: 0.0,
             chart_yaw_vel: 0.0,
             organized: false,
+            hello_promise: None,
         }
     }
 }
@@ -62,6 +91,12 @@ impl eframe::App for TemplateApp {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(result) = &self.hello_promise {
+            if let Some(result) = result.ready() {
+                log::info!("got {:?}!!", result);
+            }
+        }
+
         // Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
         // For inspiration and more examples, go to https://emilk.github.io/egui
 
@@ -94,7 +129,7 @@ impl eframe::App for TemplateApp {
             ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
             if ui.button("Load File").clicked() {
                 log::info!("button");
-                //println!("{:?}", df.collect().unwrap());
+                self.hello_promise = Some(send_req());
             }
 
             ui.separator();
