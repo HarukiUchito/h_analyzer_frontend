@@ -9,6 +9,7 @@ rust-version = "1.71"
 tonic-build = {version = "0.10.2", default-features = false, features = ["prost"]}
 
 [dependencies]
+tokio-stream = { version = "0.1"}
 poll-promise = { version = "0.3.0", features = ["web"] }
 serde_derive = "1"
 tonic = {version = "0.10.2", default-features = false, features = ["codegen", "prost"]}

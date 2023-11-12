@@ -954,6 +954,7 @@ dependencies = [
  "prost",
  "serde",
  "serde_derive",
+ "tokio-stream",
  "tonic",
  "tonic-build",
  "tonic-web-wasm-client",

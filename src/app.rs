@@ -1,4 +1,4 @@
-use hello_world::greeter_client::GreeterClient;
+use hello_world::operator_service_client::OperatorServiceClient;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -8,18 +8,37 @@ use serde_derive::{Deserialize, Serialize};
 use std::sync::mpsc::{Receiver, Sender};
 
 use poll_promise::Promise;
-fn send_req() -> Promise<Result<tonic::Response<hello_world::HelloReply>, tonic::Status>> {
+type OutputCsvStream = tonic::Streaming<hello_world::OperatorCsvFile>;
+fn send_req() -> Promise<Result<(), tonic::Status>> {
     log::info!("async!");
     Promise::spawn_local(async move {
         let base_url = "http://192.168.64.2:50051"; // URL of the gRPC-web server
         use tonic_web_wasm_client::Client;
-        let mut query_client = GreeterClient::new(Client::new(base_url.to_string()));
-        let request = tonic::Request::new(hello_world::HelloRequest {
-            name: "Tonic".into(),
-        });
+        let mut query_client = OperatorServiceClient::new(Client::new(base_url.to_string()));
+        let req = hello_world::OutputCsvOperatorRequest { group_id: 0 };
+        let mut stream = query_client.output_csv(req).await?.into_inner();
 
-        let resp = query_client.say_hello(request).await;
-        resp
+        let filename = stream.message().await?;
+        log::info!("filename: {:?}", filename);
+
+        let mut cvec = Vec::new();
+        while let Some(cdata) = stream.message().await? {
+            match cdata.value {
+                Some(hello_world::operator_csv_file::Value::Data(dv)) => {
+                    for v in dv {
+                        cvec.push(v);
+                    }
+                }
+                _ => (),
+            }
+        }
+        let rdr = CsvReader::new(std::io::Cursor::new(&cvec));
+        let df = rdr.finish().expect("csv reader error");
+
+        log::info!("cvec: {:?}", cvec);
+        log::info!("df: {:?}", df);
+
+        Ok(())
     })
 }
 
@@ -47,7 +66,7 @@ pub struct TemplateApp {
     organized: bool,
 
     #[serde(skip)]
-    hello_promise: Option<Promise<Result<tonic::Response<hello_world::HelloReply>, tonic::Status>>>,
+    hello_promise: Option<Promise<Result<(), tonic::Status>>>,
 }
 
 impl Default for TemplateApp {
