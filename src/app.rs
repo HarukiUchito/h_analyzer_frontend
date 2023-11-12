@@ -8,8 +8,33 @@ use serde_derive::{Deserialize, Serialize};
 use std::sync::mpsc::{Receiver, Sender};
 
 use poll_promise::Promise;
+type SendDataFrameStream = tonic::Streaming<hello_world::DataframeBytes>;
+fn send_req_df() -> Promise<Result<DataFrame, tonic::Status>> {
+    Promise::spawn_local(async move {
+        let base_url = "http://192.168.64.2:50051";
+        use tonic_web_wasm_client::Client;
+        let mut query_client = hello_world::polars_service_client::PolarsServiceClient::new(
+            Client::new(base_url.to_string()),
+        );
+        let req = hello_world::FilenameRequest {
+            filename: "".to_string(),
+        };
+        let mut stream = query_client.send_dataframe(req).await?.into_inner();
+
+        let mut cvec = Vec::new();
+        while let Some(cdata) = stream.message().await? {
+            for v in cdata.data {
+                cvec.push(v);
+            }
+        }
+        let df = bincode::deserialize_from(cvec.clone().as_slice()).unwrap();
+        log::info!("{}", df);
+        Ok(df)
+    })
+}
+
 type OutputCsvStream = tonic::Streaming<hello_world::OperatorCsvFile>;
-fn send_req() -> Promise<Result<(), tonic::Status>> {
+fn send_req_csv() -> Promise<Result<(), tonic::Status>> {
     log::info!("async!");
     Promise::spawn_local(async move {
         let base_url = "http://192.168.64.2:50051"; // URL of the gRPC-web server
@@ -66,7 +91,7 @@ pub struct TemplateApp {
     organized: bool,
 
     #[serde(skip)]
-    hello_promise: Option<Promise<Result<(), tonic::Status>>>,
+    hello_promise: Option<Promise<Result<DataFrame, tonic::Status>>>,
 }
 
 impl Default for TemplateApp {
@@ -148,7 +173,7 @@ impl eframe::App for TemplateApp {
             ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
             if ui.button("Load File").clicked() {
                 log::info!("button");
-                self.hello_promise = Some(send_req());
+                self.hello_promise = Some(send_req_df());
             }
 
             ui.separator();
@@ -258,17 +283,53 @@ impl eframe::App for TemplateApp {
                     .y_axis_width(4)
                     .show_axes(true)
                     .show_grid(true);
-                plot.show(ui, |plot_ui| {
-                    plot_ui.line({
-                        let time: f64 = 1.0;
-                        egui_plot::Line::new(egui_plot::PlotPoints::from_explicit_callback(
+                let time: f64 = 1.0;
+                let ppoints = if let Some(result) = &self.hello_promise {
+                    if let Some(result) = result.ready() {
+                        let xs: Vec<f64> = result
+                            .as_ref()
+                            .unwrap()
+                            .column("column_4")
+                            .unwrap()
+                            .cast(&DataType::Float64)
+                            .unwrap()
+                            .f64()
+                            .unwrap()
+                            .into_no_null_iter()
+                            .collect();
+                        let ys: Vec<f64> = result
+                            .as_ref()
+                            .unwrap()
+                            .column("column_8")
+                            .unwrap()
+                            .cast(&DataType::Float64)
+                            .unwrap()
+                            .f64()
+                            .unwrap()
+                            .into_no_null_iter()
+                            .collect();
+                        let xys: Vec<[f64; 2]> = (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
+                        egui_plot::PlotPoints::new(xys)
+                    } else {
+                        egui_plot::PlotPoints::from_explicit_callback(
                             move |x| 0.5 * (2.0 * x).sin() * time.sin(),
                             ..,
                             512,
-                        ))
-                        //                        .color(Color32::from_rgb(200, 100, 100))
-                        //                       .style(self.line_style)
-                        .name("wave")
+                        )
+                    }
+                } else {
+                    egui_plot::PlotPoints::from_explicit_callback(
+                        move |x| 0.5 * (2.0 * x).sin() * time.sin(),
+                        ..,
+                        512,
+                    )
+                };
+                plot.show(ui, |plot_ui| {
+                    plot_ui.line({
+                        egui_plot::Line::new(ppoints)
+                            //                        .color(Color32::from_rgb(200, 100, 100))
+                            //                       .style(self.line_style)
+                            .name("wave")
                     });
                 })
             });
