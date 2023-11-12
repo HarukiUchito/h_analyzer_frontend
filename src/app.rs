@@ -333,26 +333,6 @@ impl eframe::App for TemplateApp {
                     });
                 })
             });
-            egui::Window::new("test5").show(ctx, |ui| {
-                let mut plot = egui_plot::Plot::new("lines_demo")
-                    .legend(egui_plot::Legend::default())
-                    .y_axis_width(4)
-                    .show_axes(true)
-                    .show_grid(true);
-                plot.show(ui, |plot_ui| {
-                    plot_ui.line({
-                        let time: f64 = 1.0;
-                        egui_plot::Line::new(egui_plot::PlotPoints::from_explicit_callback(
-                            move |x| 0.5 * (2.0 * x).sin() * time.sin(),
-                            ..,
-                            512,
-                        ))
-                        //                        .color(Color32::from_rgb(200, 100, 100))
-                        //                       .style(self.line_style)
-                        .name("wave")
-                    });
-                })
-            });
             if !self.organized {
                 // organize windows
                 ui.memory_mut(|mem| mem.reset_areas());
