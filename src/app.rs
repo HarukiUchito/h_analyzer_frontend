@@ -4,10 +4,30 @@ pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
 
+pub mod grpc_fs {
+    tonic::include_proto!("grpc_fs");
+}
+
 use serde_derive::{Deserialize, Serialize};
 use std::sync::mpsc::{Receiver, Sender};
 
 use poll_promise::Promise;
+
+fn request_list(path: String) -> Promise<Result<grpc_fs::ListResponse, tonic::Status>> {
+    Promise::spawn_local(async move {
+        let base_url = "http://192.168.64.2:50051";
+        use tonic_web_wasm_client::Client;
+        let mut query_client =
+            grpc_fs::file_system_client::FileSystemClient::new(Client::new(base_url.to_string()));
+        let req = grpc_fs::ListRequest {
+            path: path.to_string(),
+        };
+
+        let resp = query_client.list(req).await?.into_inner();
+        Ok(resp)
+    })
+}
+
 type SendDataFrameStream = tonic::Streaming<hello_world::DataframeBytes>;
 fn send_req_df() -> Promise<Result<DataFrame, tonic::Status>> {
     Promise::spawn_local(async move {
@@ -92,10 +112,15 @@ pub struct TemplateApp {
 
     #[serde(skip)]
     hello_promise: Option<Promise<Result<DataFrame, tonic::Status>>>,
+
+    current_path: String,
+    #[serde(skip)]
+    fs_list_promise: Option<Promise<Result<grpc_fs::ListResponse, tonic::Status>>>,
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
+        let path = "/home/haruki/";
         Self {
             // Example stuff:
             label: "Hello World!".to_owned(),
@@ -107,6 +132,8 @@ impl Default for TemplateApp {
             chart_yaw_vel: 0.0,
             organized: false,
             hello_promise: None,
+            current_path: path.to_owned(),
+            fs_list_promise: Some(request_list(path.to_string())),
         }
     }
 }
@@ -178,14 +205,46 @@ impl eframe::App for TemplateApp {
 
             ui.separator();
 
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
+            if ui.button("refresh").clicked() {
+                self.fs_list_promise = Some(request_list(self.current_path.clone()));
+            }
+            ui.separator();
 
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                powered_by_egui_and_eframe(ui);
-                egui::warn_if_debug_build(ui);
+            ui.label(self.current_path.as_str());
+
+            ui.separator();
+
+            egui::ScrollArea::both().show(ui, |ui| {
+                let mut update_list = false;
+                if let Some(fs_list) = &self.fs_list_promise {
+                    if let Some(fs_list) = fs_list.ready() {
+                        if let Ok(fs_list) = fs_list {
+                            let mut b1 = false;
+                            let dirname = "..";
+                            if ui.checkbox(&mut b1, dirname).double_clicked() {
+                                let nfp =
+                                    std::path::Path::new(self.current_path.as_str()).join(dirname);
+                                self.current_path = nfp.to_string_lossy().into_owned();
+                                update_list = true;
+                            }
+                            for dirname in fs_list.directories.iter() {
+                                if ui.checkbox(&mut b1, dirname).double_clicked() {
+                                    let nfp = std::path::Path::new(self.current_path.as_str())
+                                        .join(dirname);
+                                    self.current_path = nfp.to_string_lossy().into_owned();
+                                    update_list = true;
+                                }
+                            }
+                            for filename in fs_list.files.iter() {
+                                let mut b1 = false;
+                                ui.checkbox(&mut b1, filename);
+                            }
+                        }
+                    }
+                }
+                if update_list {
+                    self.fs_list_promise = Some(request_list(self.current_path.to_string()));
+                }
             });
         });
 
