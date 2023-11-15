@@ -9,7 +9,10 @@ pub mod grpc_fs {
 }
 
 use serde_derive::{Deserialize, Serialize};
-use std::sync::mpsc::{Receiver, Sender};
+use std::{
+    ops::Deref,
+    sync::mpsc::{Receiver, Sender},
+};
 
 use poll_promise::Promise;
 
@@ -157,7 +160,10 @@ impl TemplateApp {
 impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        let current_path = self.current_path.clone();
+        self.current_path = "/home/haruki/".to_owned();
         eframe::set_value(storage, eframe::APP_KEY, self);
+        self.current_path = current_path;
     }
 
     /// Called each time the UI needs repainting, which may be many times per second.
