@@ -31,18 +31,16 @@ fn request_list(path: String) -> Promise<Result<grpc_fs::ListResponse, tonic::St
     })
 }
 
-type SendDataFrameStream = tonic::Streaming<hello_world::DataframeBytes>;
-fn send_req_df() -> Promise<Result<DataFrame, tonic::Status>> {
+type LoadDataFrameStream = tonic::Streaming<grpc_fs::DataframeBytes>;
+fn load_df_request(filepath: String) -> Promise<Result<DataFrame, tonic::Status>> {
     Promise::spawn_local(async move {
         let base_url = "http://192.168.64.2:50051";
         use tonic_web_wasm_client::Client;
-        let mut query_client = hello_world::polars_service_client::PolarsServiceClient::new(
+        let mut query_client = grpc_fs::polars_service_client::PolarsServiceClient::new(
             Client::new(base_url.to_string()),
         );
-        let req = hello_world::FilenameRequest {
-            filename: "".to_string(),
-        };
-        let mut stream = query_client.send_dataframe(req).await?.into_inner();
+        let req = grpc_fs::FilenameRequest { filename: filepath };
+        let mut stream = query_client.load_dataframe(req).await?.into_inner();
 
         let mut cvec = Vec::new();
         while let Some(cdata) = stream.message().await? {
@@ -90,6 +88,12 @@ fn send_req_csv() -> Promise<Result<(), tonic::Status>> {
     })
 }
 
+#[derive(serde::Deserialize, serde::Serialize, PartialEq)]
+enum DataFrameType {
+    NDEV,
+    KITTI,
+}
+
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
 const MOVE_SCALE: f32 = 0.01;
@@ -113,17 +117,21 @@ pub struct TemplateApp {
     chart_yaw_vel: f32,
     organized: bool,
 
+    modal_window_open: bool,
+    dataframe_type: Option<DataFrameType>,
+
     #[serde(skip)]
     hello_promise: Option<Promise<Result<DataFrame, tonic::Status>>>,
 
     current_path: String,
+    default_path: String,
     #[serde(skip)]
     fs_list_promise: Option<Promise<Result<grpc_fs::ListResponse, tonic::Status>>>,
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
-        let path = "/home/haruki/";
+        let path = "/home/haruki/data/dataset/poses/";
         Self {
             // Example stuff:
             label: "Hello World!".to_owned(),
@@ -134,8 +142,11 @@ impl Default for TemplateApp {
             chart_pitch_vel: 0.0,
             chart_yaw_vel: 0.0,
             organized: false,
+            modal_window_open: false,
+            dataframe_type: None,
             hello_promise: None,
             current_path: path.to_owned(),
+            default_path: path.to_owned(),
             fs_list_promise: Some(request_list(path.to_string())),
         }
     }
@@ -161,23 +172,51 @@ impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         let current_path = self.current_path.clone();
-        self.current_path = "/home/haruki/".to_owned();
+        self.current_path = self.default_path.clone();
         eframe::set_value(storage, eframe::APP_KEY, self);
         self.current_path = current_path;
     }
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if let Some(result) = &self.hello_promise {
-            if let Some(result) = result.ready() {
-                log::info!("got {:?}!!", result);
-            }
+        if self.modal_window_open {
+            egui::Window::new("modal")
+                .open(&mut self.modal_window_open)
+                .show(ctx, |ui| {
+                    ui.label("dataframe type");
+                    if ui
+                        .add(egui::RadioButton::new(
+                            if let Some(dtype) = &self.dataframe_type {
+                                dtype == &DataFrameType::NDEV
+                            } else {
+                                false
+                            },
+                            "NDEV",
+                        ))
+                        .clicked()
+                    {
+                        self.dataframe_type = Some(DataFrameType::NDEV);
+                    }
+                    if ui
+                        .add(egui::RadioButton::new(
+                            if let Some(dtype) = &self.dataframe_type {
+                                dtype == &DataFrameType::KITTI
+                            } else {
+                                false
+                            },
+                            "KITTI",
+                        ))
+                        .clicked()
+                    {
+                        self.dataframe_type = Some(DataFrameType::KITTI);
+                    }
+                });
         }
-
         // Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
         // For inspiration and more examples, go to https://emilk.github.io/egui
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            ui.set_enabled(!self.modal_window_open);
             // The top panel is often a good place for a menu bar:
 
             egui::menu::bar(ui, |ui| {
@@ -195,6 +234,8 @@ impl eframe::App for TemplateApp {
             });
         });
         egui::SidePanel::left("info").show(ctx, |ui| {
+            ui.set_enabled(!self.modal_window_open);
+
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("eframe template");
 
@@ -206,7 +247,9 @@ impl eframe::App for TemplateApp {
             ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
             if ui.button("Load File").clicked() {
                 log::info!("button");
-                self.hello_promise = Some(send_req_df());
+                self.hello_promise = Some(load_df_request(
+                    "/home/haruki/data/dataset/poses/05.csv".to_string(),
+                ));
             }
 
             ui.separator();
@@ -243,7 +286,14 @@ impl eframe::App for TemplateApp {
                             }
                             for filename in fs_list.files.iter() {
                                 let mut b1 = false;
-                                ui.checkbox(&mut b1, filename);
+                                if ui.checkbox(&mut b1, filename).double_clicked() {
+                                    self.modal_window_open = true;
+                                    let nfp = std::path::Path::new(self.current_path.as_str())
+                                        .join(filename);
+                                    log::info!("clicked {}", nfp.to_string_lossy());
+                                    self.hello_promise =
+                                        Some(load_df_request(nfp.to_string_lossy().to_string()));
+                                }
                             }
                         }
                     }
@@ -255,6 +305,8 @@ impl eframe::App for TemplateApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            ui.set_enabled(!self.modal_window_open);
+
             egui::Window::new("test3").show(ctx, |ui| {});
             /*
                         egui::Window::new("test").show(ctx, |ui| {
