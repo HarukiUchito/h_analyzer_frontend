@@ -310,9 +310,12 @@ impl eframe::App for TemplateApp {
                         });
             */
             egui::Window::new("test2").show(ctx, |ui| {
-                let mut plot = egui_plot::Plot::new("lines_demo")
+                let plot = egui_plot::Plot::new("lines_demo")
                     .legend(egui_plot::Legend::default())
-                    .y_axis_width(4)
+                    .data_aspect(1.0)
+                    //.y_axis_width(4)
+                    .x_axis_label("x[m]")
+                    .y_axis_label("y[m]")
                     .show_axes(true)
                     .show_grid(true);
                 let time: f64 = 1.0;
