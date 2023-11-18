@@ -19,17 +19,7 @@ use crate::backend_talk::grpc_fs;
 pub struct TemplateApp {
     #[serde(skip)]
     backend: backend_talk::BackendTalk,
-    // Example stuff:
-    label: String,
 
-    #[serde(skip)] // This how you opt-out of serialization of a field
-    value: f32,
-
-    chart_pitch: f32,
-    chart_yaw: f32,
-    chart_scale: f32,
-    chart_pitch_vel: f32,
-    chart_yaw_vel: f32,
     organized: bool,
 
     modal_window_open: bool,
@@ -52,14 +42,6 @@ impl Default for TemplateApp {
         let fs_list_promise = backend.request_list(path.to_string());
         Self {
             backend: backend,
-            // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
-            chart_pitch: 0.3,
-            chart_yaw: 0.9,
-            chart_scale: 0.9,
-            chart_pitch_vel: 0.0,
-            chart_yaw_vel: 0.0,
             organized: false,
             modal_window_open: false,
             dataframe_type: None,
@@ -222,94 +204,8 @@ impl eframe::App for TemplateApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.set_enabled(!self.modal_window_open);
 
-            egui::Window::new("test3").show(ctx, |ui| {});
-            /*
-                        egui::Window::new("test").show(ctx, |ui| {
-                            // First, get mouse data
-                            let (pitch_delta, yaw_delta, scale_delta) = ui.input(|input| {
-                                let pointer = &input.pointer;
-                                let delta = pointer.delta();
-
-                                let (pitch_delta, yaw_delta) = match pointer.primary_down() {
-                                    true => (delta.y * MOVE_SCALE, -delta.x * MOVE_SCALE),
-                                    false => (self.chart_pitch_vel, self.chart_yaw_vel),
-                                };
-
-                                let scale_delta = input.scroll_delta.y * SCROLL_SCALE;
-
-                                (pitch_delta, yaw_delta, scale_delta)
-                            });
-
-                            self.chart_pitch_vel = pitch_delta;
-                            self.chart_yaw_vel = yaw_delta;
-
-                            self.chart_pitch += self.chart_pitch_vel;
-                            self.chart_yaw += self.chart_yaw_vel;
-                            self.chart_scale += scale_delta;
-
-                            // Next plot everything
-                            let root = EguiBackend::new(ui).into_drawing_area();
-
-                            root.fill(&WHITE).unwrap();
-
-                            let x_axis = (-3.0..3.0).step(0.1);
-                            let z_axis = (-3.0..3.0).step(0.1);
-
-                            let mut chart = ChartBuilder::on(&root)
-                                .caption(format!("3D Plot Test"), (FontFamily::SansSerif, 20))
-                                .build_cartesian_3d(x_axis, -3.0..3.0, z_axis)
-                                .unwrap();
-
-                            chart.with_projection(|mut pb| {
-                                pb.yaw = self.chart_yaw as f64;
-                                pb.pitch = self.chart_pitch as f64;
-                                pb.scale = self.chart_scale as f64;
-                                pb.into_matrix()
-                            });
-
-                            chart
-                                .configure_axes()
-                                .light_grid_style(BLACK.mix(0.15))
-                                .max_light_lines(3)
-                                .draw()
-                                .unwrap();
-
-                            chart
-                                .draw_series(
-                                    SurfaceSeries::xoz(
-                                        (-30..30).map(|f| f as f64 / 10.0),
-                                        (-30..30).map(|f| f as f64 / 10.0),
-                                        |x, z| (x * x + z * z).cos(),
-                                    )
-                                    .style(BLUE.mix(0.2).filled()),
-                                )
-                                .unwrap()
-                                .label("Surface")
-                                .legend(|(x, y)| {
-                                    Rectangle::new([(x + 5, y - 5), (x + 15, y + 5)], BLUE.mix(0.5).filled())
-                                });
-
-                            chart
-                                .draw_series(LineSeries::new(
-                                    (-100..100)
-                                        .map(|y| y as f64 / 40.0)
-                                        .map(|y| ((y * 10.0).sin(), y, (y * 10.0).cos())),
-                                    &BLACK,
-                                ))
-                                .unwrap()
-                                .label("Line")
-                                .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], BLACK));
-
-                            chart
-                                .configure_series_labels()
-                                .border_style(BLACK)
-                                .draw()
-                                .unwrap();
-
-                            root.present().unwrap();
-                        });
-            */
-            egui::Window::new("test2").show(ctx, |ui| {
+            egui::Window::new("table").show(ctx, |ui| {});
+            egui::Window::new("plot").show(ctx, |ui| {
                 let plot = egui_plot::Plot::new("lines_demo")
                     .legend(egui_plot::Legend::default())
                     .data_aspect(1.0)
