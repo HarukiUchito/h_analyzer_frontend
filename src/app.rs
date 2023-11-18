@@ -1,91 +1,3 @@
-use hello_world::operator_service_client::OperatorServiceClient;
-
-pub mod hello_world {
-    tonic::include_proto!("helloworld");
-}
-
-pub mod grpc_fs {
-    tonic::include_proto!("grpc_fs");
-}
-
-use serde_derive::{Deserialize, Serialize};
-use std::{
-    ops::Deref,
-    sync::mpsc::{Receiver, Sender},
-};
-
-use poll_promise::Promise;
-
-fn request_list(path: String) -> Promise<Result<grpc_fs::ListResponse, tonic::Status>> {
-    Promise::spawn_local(async move {
-        let base_url = "http://192.168.64.2:50051";
-        use tonic_web_wasm_client::Client;
-        let mut query_client =
-            grpc_fs::file_system_client::FileSystemClient::new(Client::new(base_url.to_string()));
-        let req = grpc_fs::ListRequest {
-            path: path.to_string(),
-        };
-
-        let resp = query_client.list(req).await?.into_inner();
-        Ok(resp)
-    })
-}
-
-fn load_df_request(filepath: String) -> Promise<Result<DataFrame, tonic::Status>> {
-    Promise::spawn_local(async move {
-        let base_url = "http://192.168.64.2:50051";
-        use tonic_web_wasm_client::Client;
-        let mut query_client = grpc_fs::polars_service_client::PolarsServiceClient::new(
-            Client::new(base_url.to_string()),
-        );
-        let req = grpc_fs::FilenameRequest { filename: filepath };
-        let mut stream = query_client.load_dataframe(req).await?.into_inner();
-
-        let mut cvec = Vec::new();
-        while let Some(cdata) = stream.message().await? {
-            for v in cdata.data {
-                cvec.push(v);
-            }
-        }
-        let df = bincode::deserialize_from(cvec.clone().as_slice()).unwrap();
-        log::info!("{}", df);
-        Ok(df)
-    })
-}
-
-fn send_req_csv() -> Promise<Result<(), tonic::Status>> {
-    log::info!("async!");
-    Promise::spawn_local(async move {
-        let base_url = "http://192.168.64.2:50051"; // URL of the gRPC-web server
-        use tonic_web_wasm_client::Client;
-        let mut query_client = OperatorServiceClient::new(Client::new(base_url.to_string()));
-        let req = hello_world::OutputCsvOperatorRequest { group_id: 0 };
-        let mut stream = query_client.output_csv(req).await?.into_inner();
-
-        let filename = stream.message().await?;
-        log::info!("filename: {:?}", filename);
-
-        let mut cvec = Vec::new();
-        while let Some(cdata) = stream.message().await? {
-            match cdata.value {
-                Some(hello_world::operator_csv_file::Value::Data(dv)) => {
-                    for v in dv {
-                        cvec.push(v);
-                    }
-                }
-                _ => (),
-            }
-        }
-        let rdr = CsvReader::new(std::io::Cursor::new(&cvec));
-        let df = rdr.finish().expect("csv reader error");
-
-        log::info!("cvec: {:?}", cvec);
-        log::info!("df: {:?}", df);
-
-        Ok(())
-    })
-}
-
 #[derive(serde::Deserialize, serde::Serialize, PartialEq)]
 enum DataFrameType {
     NDEV,
@@ -94,14 +6,19 @@ enum DataFrameType {
 
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
-const MOVE_SCALE: f32 = 0.01;
-const SCROLL_SCALE: f32 = 0.001;
 use eframe::egui;
 use polars::prelude::*;
+use poll_promise::Promise;
+
+use crate::backend_talk;
+use crate::backend_talk::grpc_fs;
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
+    #[serde(skip)]
+    backend: backend_talk::BackendTalk,
     // Example stuff:
     label: String,
 
@@ -131,7 +48,10 @@ pub struct TemplateApp {
 impl Default for TemplateApp {
     fn default() -> Self {
         let path = "/home/haruki/data/dataset/poses/";
+        let backend = backend_talk::BackendTalk::default();
+        let fs_list_promise = backend.request_list(path.to_string());
         Self {
+            backend: backend,
             // Example stuff:
             label: "Hello World!".to_owned(),
             value: 2.7,
@@ -147,7 +67,7 @@ impl Default for TemplateApp {
             hello_promise: None,
             current_path: path.to_owned(),
             default_path: path.to_owned(),
-            fs_list_promise: Some(request_list(path.to_string())),
+            fs_list_promise: Some(fs_list_promise),
         }
     }
 }
@@ -212,7 +132,8 @@ impl eframe::App for TemplateApp {
                     }
                     if ui.button("Load File").clicked() {
                         if let Some(filepath) = &self.filepath_to_be_loaded {
-                            self.hello_promise = Some(load_df_request(filepath.clone()));
+                            self.hello_promise =
+                                Some(self.backend.load_df_request(filepath.clone()));
                             self.filepath_to_be_loaded = None;
                             self.modal_window_open = false;
                         }
@@ -249,7 +170,7 @@ impl eframe::App for TemplateApp {
             ui.separator();
 
             if ui.button("refresh").clicked() {
-                self.fs_list_promise = Some(request_list(self.current_path.clone()));
+                self.fs_list_promise = Some(self.backend.request_list(self.current_path.clone()));
             }
             ui.separator();
 
@@ -292,7 +213,8 @@ impl eframe::App for TemplateApp {
                     }
                 }
                 if update_list {
-                    self.fs_list_promise = Some(request_list(self.current_path.to_string()));
+                    self.fs_list_promise =
+                        Some(self.backend.request_list(self.current_path.to_string()));
                 }
             });
         });
@@ -450,18 +372,4 @@ impl eframe::App for TemplateApp {
             }
         });
     }
-}
-
-fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.label("Powered by ");
-        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-        ui.label(" and ");
-        ui.hyperlink_to(
-            "eframe",
-            "https://github.com/emilk/egui/tree/master/crates/eframe",
-        );
-        ui.label(".");
-    });
 }
