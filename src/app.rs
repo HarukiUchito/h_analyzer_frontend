@@ -31,7 +31,6 @@ fn request_list(path: String) -> Promise<Result<grpc_fs::ListResponse, tonic::St
     })
 }
 
-type LoadDataFrameStream = tonic::Streaming<grpc_fs::DataframeBytes>;
 fn load_df_request(filepath: String) -> Promise<Result<DataFrame, tonic::Status>> {
     Promise::spawn_local(async move {
         let base_url = "http://192.168.64.2:50051";
@@ -54,7 +53,6 @@ fn load_df_request(filepath: String) -> Promise<Result<DataFrame, tonic::Status>
     })
 }
 
-type OutputCsvStream = tonic::Streaming<hello_world::OperatorCsvFile>;
 fn send_req_csv() -> Promise<Result<(), tonic::Status>> {
     log::info!("async!");
     Promise::spawn_local(async move {
@@ -119,6 +117,7 @@ pub struct TemplateApp {
 
     modal_window_open: bool,
     dataframe_type: Option<DataFrameType>,
+    filepath_to_be_loaded: Option<String>,
 
     #[serde(skip)]
     hello_promise: Option<Promise<Result<DataFrame, tonic::Status>>>,
@@ -144,6 +143,7 @@ impl Default for TemplateApp {
             organized: false,
             modal_window_open: false,
             dataframe_type: None,
+            filepath_to_be_loaded: None,
             hello_promise: None,
             current_path: path.to_owned(),
             default_path: path.to_owned(),
@@ -181,7 +181,7 @@ impl eframe::App for TemplateApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.modal_window_open {
             egui::Window::new("modal")
-                .open(&mut self.modal_window_open)
+                //                .open(&mut self.modal_window_open)
                 .show(ctx, |ui| {
                     ui.label("dataframe type");
                     if ui
@@ -209,6 +209,13 @@ impl eframe::App for TemplateApp {
                         .clicked()
                     {
                         self.dataframe_type = Some(DataFrameType::KITTI);
+                    }
+                    if ui.button("Load File").clicked() {
+                        if let Some(filepath) = &self.filepath_to_be_loaded {
+                            self.hello_promise = Some(load_df_request(filepath.clone()));
+                            self.filepath_to_be_loaded = None;
+                            self.modal_window_open = false;
+                        }
                     }
                 });
         }
@@ -238,19 +245,6 @@ impl eframe::App for TemplateApp {
 
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("eframe template");
-
-            ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(&mut self.label);
-            });
-
-            ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
-            if ui.button("Load File").clicked() {
-                log::info!("button");
-                self.hello_promise = Some(load_df_request(
-                    "/home/haruki/data/dataset/poses/05.csv".to_string(),
-                ));
-            }
 
             ui.separator();
 
@@ -290,9 +284,8 @@ impl eframe::App for TemplateApp {
                                     self.modal_window_open = true;
                                     let nfp = std::path::Path::new(self.current_path.as_str())
                                         .join(filename);
-                                    log::info!("clicked {}", nfp.to_string_lossy());
-                                    self.hello_promise =
-                                        Some(load_df_request(nfp.to_string_lossy().to_string()));
+                                    self.filepath_to_be_loaded =
+                                        Some(nfp.to_string_lossy().to_string());
                                 }
                             }
                         }
