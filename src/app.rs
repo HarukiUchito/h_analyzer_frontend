@@ -32,14 +32,18 @@ pub struct TemplateApp {
     current_path: String,
     default_path: String,
     #[serde(skip)]
+    d_path_promise: Option<Promise<Result<grpc_fs::PathMessage, tonic::Status>>>,
+    #[serde(skip)]
     fs_list_promise: Option<Promise<Result<grpc_fs::ListResponse, tonic::Status>>>,
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
-        let path = "/home/haruki/data/dataset/poses/";
         let backend = backend_talk::BackendTalk::default();
-        let fs_list_promise = backend.request_list(path.to_string());
+
+        let path = "/".to_string();
+        let d_path_promise = backend.request_default_path();
+        let fs_list_promise = backend.request_list(path.clone());
         Self {
             backend: backend,
             organized: false,
@@ -47,8 +51,9 @@ impl Default for TemplateApp {
             dataframe_type: None,
             filepath_to_be_loaded: None,
             hello_promise: None,
-            current_path: path.to_owned(),
-            default_path: path.to_owned(),
+            current_path: path.clone(),
+            default_path: path.clone(),
+            d_path_promise: Some(d_path_promise),
             fs_list_promise: Some(fs_list_promise),
         }
     }
@@ -81,6 +86,17 @@ impl eframe::App for TemplateApp {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(d_path_promise) = &self.d_path_promise {
+            if let Some(d_path) = d_path_promise.ready() {
+                log::info!("d_path_promise: {:?}", d_path);
+                let d_path = d_path.as_ref().unwrap().path.clone();
+                self.current_path = d_path.clone();
+                self.default_path = d_path.clone();
+                self.fs_list_promise = Some(self.backend.request_list(d_path.clone()));
+                self.d_path_promise = None;
+            }
+        }
+
         if self.modal_window_open {
             egui::Window::new("modal")
                 //                .open(&mut self.modal_window_open)

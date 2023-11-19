@@ -13,11 +13,25 @@ pub struct BackendTalk {
     server_address: String,
 }
 
+use tonic_web_wasm_client::Client;
 impl BackendTalk {
     pub fn default() -> Self {
         BackendTalk {
             server_address: "http://192.168.64.2:50051".to_string(),
         }
+    }
+
+    pub fn request_default_path(&self) -> Promise<Result<grpc_fs::PathMessage, tonic::Status>> {
+        let addr = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_fs::file_system_client::FileSystemClient::new(Client::new(addr));
+            let req = grpc_fs::Empty {};
+
+            let resp = query_client.default_path(req).await?.into_inner();
+            log::info!("resp: {:?}", resp);
+            Ok(resp)
+        })
     }
 
     pub fn request_list(
@@ -26,10 +40,9 @@ impl BackendTalk {
     ) -> Promise<Result<grpc_fs::ListResponse, tonic::Status>> {
         let addr = self.server_address.clone();
         Promise::spawn_local(async move {
-            use tonic_web_wasm_client::Client;
             let mut query_client =
                 grpc_fs::file_system_client::FileSystemClient::new(Client::new(addr));
-            let req = grpc_fs::ListRequest {
+            let req = grpc_fs::PathMessage {
                 path: path.to_string(),
             };
 
@@ -41,7 +54,6 @@ impl BackendTalk {
     pub fn load_df_request(&self, filepath: String) -> Promise<Result<DataFrame, tonic::Status>> {
         let base_url = self.server_address.clone();
         Promise::spawn_local(async move {
-            use tonic_web_wasm_client::Client;
             let mut query_client = grpc_fs::polars_service_client::PolarsServiceClient::new(
                 Client::new(base_url.to_string()),
             );
@@ -63,7 +75,6 @@ impl BackendTalk {
     pub fn send_req_csv(&self) -> Promise<Result<(), tonic::Status>> {
         let base_url = self.server_address.clone();
         Promise::spawn_local(async move {
-            use tonic_web_wasm_client::Client;
             let mut query_client = hello_world::operator_service_client::OperatorServiceClient::new(
                 Client::new(base_url.to_string()),
             );
