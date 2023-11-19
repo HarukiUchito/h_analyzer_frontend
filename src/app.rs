@@ -147,8 +147,7 @@ impl eframe::App for TemplateApp {
             ui.set_enabled(!self.modal_window_open);
 
             // The central panel the region left after adding TopPanel's and SidePanel's
-            ui.heading("eframe template");
-
+            ui.heading("h_analyzer");
             ui.separator();
 
             if ui.button("refresh").clicked() {
@@ -204,7 +203,22 @@ impl eframe::App for TemplateApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.set_enabled(!self.modal_window_open);
 
-            egui::Window::new("table").show(ctx, |ui| {});
+            egui::Window::new("table").show(ctx, |ui| {
+                if let Some(result) = &self.hello_promise {
+                    if let Some(df) = result.ready() {
+                        if let Ok(df) = df {
+                            display_dataframe(ui, df);
+                        } else {
+                            default_table(ui)
+                        }
+                    } else {
+                        default_table(ui)
+                    }
+                } else {
+                    default_table(ui);
+                };
+            });
+
             egui::Window::new("plot").show(ctx, |ui| {
                 let plot = egui_plot::Plot::new("lines_demo")
                     .legend(egui_plot::Legend::default())
@@ -271,4 +285,84 @@ impl eframe::App for TemplateApp {
             }
         });
     }
+}
+
+use egui_extras::{Column, TableBuilder};
+
+fn display_dataframe(ui: &mut egui::Ui, df: &DataFrame) {
+    let column_names = df.get_column_names();
+
+    let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
+    let table = TableBuilder::new(ui)
+        .striped(true)
+        .resizable(true)
+        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+        .columns(Column::auto(), column_names.len() + 1);
+
+    let cols = df.get_columns();
+    table
+        .header(20.0, |mut header| {
+            header.col(|ui| {
+                ui.strong("index");
+            });
+            for cname in df.get_column_names() {
+                header.col(|ui| {
+                    ui.strong(cname);
+                });
+            }
+        })
+        .body(|mut body| {
+            body.rows(text_height, cols[0].len(), |row_index, mut row| {
+                row.col(|ui| {
+                    ui.strong(row_index.to_string());
+                });
+                for c_idx in 0..column_names.len() {
+                    row.col(|ui| {
+                        ui.label(cols[c_idx].get(row_index).unwrap().to_string());
+                    });
+                }
+            });
+        });
+}
+
+fn default_table(ui: &mut egui::Ui) {
+    let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
+    let table = TableBuilder::new(ui)
+        .striped(true)
+        .resizable(true)
+        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+        .column(Column::auto())
+        .column(Column::auto())
+        .column(Column::auto())
+        .column(Column::remainder())
+        .min_scrolled_height(0.0);
+
+    table
+        .header(20.0, |mut header| {
+            header.col(|ui| {
+                ui.strong("Row");
+            });
+            header.col(|ui| {
+                ui.strong("Expanding content");
+            });
+            header.col(|ui| {
+                ui.strong("Clipped text");
+            });
+            header.col(|ui| {
+                ui.strong("Content");
+            });
+        })
+        .body(|mut body| {
+            body.rows(text_height, 10000, |row_index, mut row| {
+                row.col(|ui| {
+                    ui.label(row_index.to_string());
+                });
+                row.col(|ui| {
+                    ui.label("test");
+                });
+                row.col(|ui| {
+                    ui.label("test");
+                });
+            });
+        });
 }
