@@ -180,6 +180,8 @@ impl eframe::App for TemplateApp {
                 if let Some(fs_list) = &self.fs_list_promise {
                     if let Some(fs_list) = fs_list.ready() {
                         if let Ok(fs_list) = fs_list {
+                            let mut fsvec = fs_list.files.clone();
+                            fsvec.sort();
                             let mut b1 = false;
                             let dirname = "..";
                             if ui.checkbox(&mut b1, dirname).double_clicked() {
@@ -196,7 +198,7 @@ impl eframe::App for TemplateApp {
                                     update_list = true;
                                 }
                             }
-                            for filename in fs_list.files.iter() {
+                            for filename in fsvec.iter() {
                                 let mut b1 = false;
                                 if ui.checkbox(&mut b1, filename).double_clicked() {
                                     self.modal_window_open = true;
@@ -306,79 +308,83 @@ impl eframe::App for TemplateApp {
 use egui_extras::{Column, TableBuilder};
 
 fn display_dataframe(ui: &mut egui::Ui, df: &DataFrame) {
-    let column_names = df.get_column_names();
+    egui::ScrollArea::both().max_width(500.0).show(ui, |ui| {
+        let column_names = df.get_column_names();
 
-    let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
-    let table = TableBuilder::new(ui)
-        .striped(true)
-        .resizable(true)
-        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .columns(Column::auto(), column_names.len() + 1);
+        let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
+        let table = TableBuilder::new(ui)
+            .striped(true)
+            .resizable(true)
+            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+            .columns(Column::auto(), column_names.len() + 1);
 
-    let cols = df.get_columns();
-    table
-        .header(20.0, |mut header| {
-            header.col(|ui| {
-                ui.strong("index");
-            });
-            for cname in df.get_column_names() {
+        let cols = df.get_columns();
+        table
+            .header(20.0, |mut header| {
                 header.col(|ui| {
-                    ui.strong(cname);
+                    ui.strong("index");
                 });
-            }
-        })
-        .body(|mut body| {
-            body.rows(text_height, cols[0].len(), |row_index, mut row| {
-                row.col(|ui| {
-                    ui.strong(row_index.to_string());
-                });
-                for c_idx in 0..column_names.len() {
-                    row.col(|ui| {
-                        ui.label(cols[c_idx].get(row_index).unwrap().to_string());
+                for cname in df.get_column_names() {
+                    header.col(|ui| {
+                        ui.strong(cname);
                     });
                 }
+            })
+            .body(|mut body| {
+                body.rows(text_height, cols[0].len(), |row_index, mut row| {
+                    row.col(|ui| {
+                        ui.strong(row_index.to_string());
+                    });
+                    for c_idx in 0..column_names.len() {
+                        row.col(|ui| {
+                            ui.label(cols[c_idx].get(row_index).unwrap().to_string());
+                        });
+                    }
+                });
             });
-        });
+    });
 }
 
 fn default_table(ui: &mut egui::Ui) {
-    let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
-    let table = TableBuilder::new(ui)
-        .striped(true)
-        .resizable(true)
-        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::auto())
-        .column(Column::auto())
-        .column(Column::auto())
-        .column(Column::remainder())
-        .min_scrolled_height(0.0);
+    egui::ScrollArea::both().max_width(500.0).show(ui, |ui| {
+        let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
+        let table = TableBuilder::new(ui)
+            .striped(true)
+            .resizable(true)
+            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+            .column(Column::auto())
+            .column(Column::auto())
+            .column(Column::auto())
+            .column(Column::remainder())
+            .min_scrolled_height(0.0);
 
-    table
-        .header(20.0, |mut header| {
-            header.col(|ui| {
-                ui.strong("Row");
-            });
-            header.col(|ui| {
-                ui.strong("Expanding content");
-            });
-            header.col(|ui| {
-                ui.strong("Clipped text");
-            });
-            header.col(|ui| {
-                ui.strong("Content");
-            });
-        })
-        .body(|mut body| {
-            body.rows(text_height, 10000, |row_index, mut row| {
-                row.col(|ui| {
-                    ui.label(row_index.to_string());
+        table
+            .header(20.0, |mut header| {
+                header.col(|ui| {
+                    ui.strong("Row");
                 });
-                row.col(|ui| {
-                    ui.label("test");
+                header.col(|ui| {
+                    ui.strong("Expanding content");
                 });
-                row.col(|ui| {
-                    ui.label("test");
+                header.col(|ui| {
+                    ui.strong("Clipped text");
+                });
+                header.col(|ui| {
+                    ui.strong("Content");
+                });
+            })
+            .body(|mut body| {
+                body.rows(text_height, 10000, |row_index, mut row| {
+                    row.col(|ui| {
+                        ui.label(row_index.to_string());
+                    });
+                    row.col(|ui| {
+                        ui.label("test");
+                    });
+                    row.col(|ui| {
+                        ui.label("test");
+                    });
                 });
             });
-        });
+    });
 }
