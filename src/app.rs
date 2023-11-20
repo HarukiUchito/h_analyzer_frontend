@@ -4,6 +4,14 @@ enum DataFrameType {
     KITTI,
 }
 
+#[derive(serde::Deserialize, serde::Serialize, PartialEq)]
+enum ExplorerTab {
+    FILESYSTEM,
+    DATAFRAME,
+}
+
+use std::collections::HashMap;
+
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
 use eframe::egui;
@@ -26,8 +34,11 @@ pub struct TemplateApp {
     dataframe_type: Option<DataFrameType>,
     filepath_to_be_loaded: Option<String>,
 
+    explorer_tab: ExplorerTab,
+    dataframes: HashMap<String, DataFrame>,
+
     #[serde(skip)]
-    hello_promise: Option<Promise<Result<DataFrame, tonic::Status>>>,
+    hello_promise: Option<(String, Promise<Result<DataFrame, tonic::Status>>)>,
 
     current_path: String,
     default_path: String,
@@ -50,6 +61,10 @@ impl Default for TemplateApp {
             modal_window_open: false,
             dataframe_type: None,
             filepath_to_be_loaded: None,
+
+            explorer_tab: ExplorerTab::FILESYSTEM,
+            dataframes: HashMap::new(),
+
             hello_promise: None,
             current_path: path.clone(),
             default_path: path.clone(),
@@ -73,6 +88,14 @@ impl TemplateApp {
 
         Default::default()
     }
+}
+
+#[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+enum Enum {
+    First,
+    Second,
+    Third,
 }
 
 impl eframe::App for TemplateApp {
@@ -101,6 +124,14 @@ impl eframe::App for TemplateApp {
             egui::Window::new("modal")
                 //                .open(&mut self.modal_window_open)
                 .show(ctx, |ui| {
+                    let dfname = if let Some(fpath) = self.filepath_to_be_loaded.as_ref() {
+                        let pathv = std::path::Path::new(fpath);
+                        let name = pathv.file_name().unwrap().to_string_lossy().to_string();
+                        ui.label(name.clone());
+                        name
+                    } else {
+                        "null".to_string()
+                    };
                     ui.label("dataframe type");
                     if ui
                         .add(egui::RadioButton::new(
@@ -131,7 +162,7 @@ impl eframe::App for TemplateApp {
                     if ui.button("Load File").clicked() {
                         if let Some(filepath) = &self.filepath_to_be_loaded {
                             self.hello_promise =
-                                Some(self.backend.load_df_request(filepath.clone()));
+                                Some((dfname, self.backend.load_df_request(filepath.clone())));
                             self.filepath_to_be_loaded = None;
                             self.modal_window_open = false;
                         }
@@ -164,67 +195,85 @@ impl eframe::App for TemplateApp {
 
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("h_analyzer");
-            ui.separator();
 
-            if ui.button("refresh").clicked() {
-                self.fs_list_promise = Some(self.backend.request_list(self.current_path.clone()));
-            }
-            ui.separator();
-
-            ui.label(self.current_path.as_str());
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut self.explorer_tab, ExplorerTab::FILESYSTEM, "Files");
+                ui.selectable_value(&mut self.explorer_tab, ExplorerTab::DATAFRAME, "DataFrames");
+            });
 
             ui.separator();
 
-            egui::ScrollArea::both().show(ui, |ui| {
-                let mut update_list = false;
-                if let Some(fs_list) = &self.fs_list_promise {
-                    if let Some(fs_list) = fs_list.ready() {
-                        if let Ok(fs_list) = fs_list {
-                            let mut fsvec = fs_list.files.clone();
-                            fsvec.sort();
-                            let mut b1 = false;
-                            let dirname = "..";
-                            if ui.checkbox(&mut b1, dirname).double_clicked() {
-                                let nfp =
-                                    std::path::Path::new(self.current_path.as_str()).join(dirname);
-                                self.current_path = nfp.to_string_lossy().into_owned();
-                                update_list = true;
-                            }
-                            for dirname in fs_list.directories.iter() {
-                                if ui.checkbox(&mut b1, dirname).double_clicked() {
-                                    let nfp = std::path::Path::new(self.current_path.as_str())
-                                        .join(dirname);
-                                    self.current_path = nfp.to_string_lossy().into_owned();
-                                    update_list = true;
-                                }
-                            }
-                            for filename in fsvec.iter() {
-                                let mut b1 = false;
-                                if ui.checkbox(&mut b1, filename).double_clicked() {
-                                    self.modal_window_open = true;
-                                    let nfp = std::path::Path::new(self.current_path.as_str())
-                                        .join(filename);
-                                    self.filepath_to_be_loaded =
-                                        Some(nfp.to_string_lossy().to_string());
+            match self.explorer_tab {
+                ExplorerTab::FILESYSTEM => {
+                    ui.label(self.current_path.as_str());
+                    if ui.button("refresh").clicked() {
+                        self.fs_list_promise =
+                            Some(self.backend.request_list(self.current_path.clone()));
+                    }
+
+                    ui.separator();
+
+                    egui::ScrollArea::both().show(ui, |ui| {
+                        let mut update_list = false;
+                        if let Some(fs_list) = &self.fs_list_promise {
+                            if let Some(fs_list) = fs_list.ready() {
+                                if let Ok(fs_list) = fs_list {
+                                    let mut fsvec = fs_list.files.clone();
+                                    fsvec.sort();
+                                    let mut b1 = false;
+                                    let dirname = "..";
+                                    if ui.checkbox(&mut b1, dirname).double_clicked() {
+                                        let nfp = std::path::Path::new(self.current_path.as_str())
+                                            .join(dirname);
+                                        self.current_path = nfp.to_string_lossy().into_owned();
+                                        update_list = true;
+                                    }
+                                    for dirname in fs_list.directories.iter() {
+                                        if ui.checkbox(&mut b1, dirname).double_clicked() {
+                                            let nfp =
+                                                std::path::Path::new(self.current_path.as_str())
+                                                    .join(dirname);
+                                            self.current_path = nfp.to_string_lossy().into_owned();
+                                            update_list = true;
+                                        }
+                                    }
+                                    for filename in fsvec.iter() {
+                                        let mut b1 = false;
+                                        if ui.checkbox(&mut b1, filename).double_clicked() {
+                                            self.modal_window_open = true;
+                                            let nfp =
+                                                std::path::Path::new(self.current_path.as_str())
+                                                    .join(filename);
+                                            self.filepath_to_be_loaded =
+                                                Some(nfp.to_string_lossy().to_string());
+                                        }
+                                    }
                                 }
                             }
                         }
+                        if update_list {
+                            self.fs_list_promise =
+                                Some(self.backend.request_list(self.current_path.to_string()));
+                        }
+                    });
+                }
+                ExplorerTab::DATAFRAME => {
+                    for (name, _) in self.dataframes.iter() {
+                        let mut checkd = false;
+                        ui.checkbox(&mut checkd, name.clone());
                     }
                 }
-                if update_list {
-                    self.fs_list_promise =
-                        Some(self.backend.request_list(self.current_path.to_string()));
-                }
-            });
+            }
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.set_enabled(!self.modal_window_open);
 
             egui::Window::new("table").show(ctx, |ui| {
-                if let Some(result) = &self.hello_promise {
+                if let Some((dfname, result)) = &self.hello_promise {
                     if let Some(df) = result.ready() {
                         if let Ok(df) = df {
+                            self.dataframes.insert(dfname.clone(), df.clone());
                             display_dataframe(ui, df);
                         } else {
                             default_table(ui)
@@ -238,6 +287,20 @@ impl eframe::App for TemplateApp {
             });
 
             egui::Window::new("plot").show(ctx, |ui| {
+                let radio = &mut Enum::First;
+                ui.horizontal(|ui| {
+                    ui.label("Select DataFrame");
+                    egui::ComboBox::from_label("")
+                        .selected_text(format!("{radio:?}"))
+                        .show_ui(ui, |ui| {
+                            ui.style_mut().wrap = Some(false);
+                            ui.set_min_width(60.0);
+                            ui.selectable_value(radio, Enum::First, "First");
+                            ui.selectable_value(radio, Enum::Second, "Second");
+                            ui.selectable_value(radio, Enum::Third, "Third");
+                        });
+                });
+                ui.separator();
                 let plot = egui_plot::Plot::new("lines_demo")
                     .legend(egui_plot::Legend::default())
                     .data_aspect(1.0)
@@ -247,7 +310,7 @@ impl eframe::App for TemplateApp {
                     .show_axes(true)
                     .show_grid(true);
                 let time: f64 = 1.0;
-                let ppoints = if let Some(result) = &self.hello_promise {
+                let ppoints = if let Some((_, result)) = &self.hello_promise {
                     if let Some(result) = result.ready() {
                         let xs: Vec<f64> = result
                             .as_ref()
@@ -330,7 +393,7 @@ fn display_dataframe(ui: &mut egui::Ui, df: &DataFrame) {
                     });
                 }
             })
-            .body(|mut body| {
+            .body(|body| {
                 body.rows(text_height, cols[0].len(), |row_index, mut row| {
                     row.col(|ui| {
                         ui.strong(row_index.to_string());
@@ -373,7 +436,7 @@ fn default_table(ui: &mut egui::Ui) {
                     ui.strong("Content");
                 });
             })
-            .body(|mut body| {
+            .body(|body| {
                 body.rows(text_height, 10000, |row_index, mut row| {
                     row.col(|ui| {
                         ui.label(row_index.to_string());
