@@ -63,7 +63,6 @@ impl BackendTalk {
                 }
             }
             let df = bincode::deserialize_from(cvec.clone().as_slice()).unwrap();
-            log::info!("{}", df);
             Ok(df)
         })
     }

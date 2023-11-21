@@ -14,12 +14,13 @@ use std::collections::HashMap;
 
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
-use eframe::egui;
+use eframe::{egui, emath::Align2};
 use polars::prelude::*;
 use poll_promise::Promise;
 
 use crate::backend_talk;
 use crate::backend_talk::grpc_fs;
+use crate::components::dataframe_table;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -123,6 +124,7 @@ impl eframe::App for TemplateApp {
         if self.modal_window_open {
             egui::Window::new("modal")
                 //                .open(&mut self.modal_window_open)
+                .anchor(Align2::CENTER_TOP, egui::Vec2::new(0.0, 100.0))
                 .show(ctx, |ui| {
                     let dfname = if let Some(fpath) = self.filepath_to_be_loaded.as_ref() {
                         let pathv = std::path::Path::new(fpath);
@@ -188,6 +190,10 @@ impl eframe::App for TemplateApp {
                 }
 
                 egui::widgets::global_dark_light_mode_buttons(ui);
+
+                if ui.button("reset layout").clicked() {
+                    self.organized = false;
+                }
             });
         });
         egui::SidePanel::left("info").show(ctx, |ui| {
@@ -270,20 +276,18 @@ impl eframe::App for TemplateApp {
             ui.set_enabled(!self.modal_window_open);
 
             egui::Window::new("table").show(ctx, |ui| {
-                if let Some((dfname, result)) = &self.hello_promise {
-                    if let Some(df) = result.ready() {
-                        if let Ok(df) = df {
-                            self.dataframes.insert(dfname.clone(), df.clone());
-                            display_dataframe(ui, df);
-                        } else {
-                            default_table(ui)
+                let df = (|| {
+                    if let Some((dname, result)) = &self.hello_promise {
+                        if let Some(result) = result.ready() {
+                            if let Ok(result) = result {
+                                self.dataframes.insert(dname.clone(), result.clone());
+                                return result.clone();
+                            }
                         }
-                    } else {
-                        default_table(ui)
                     }
-                } else {
-                    default_table(ui);
-                };
+                    DataFrame::default()
+                })();
+                dataframe_table::DataFrameTable::default().show(ui, &df);
             });
 
             egui::Window::new("plot").show(ctx, |ui| {
@@ -366,88 +370,4 @@ impl eframe::App for TemplateApp {
             }
         });
     }
-}
-
-use egui_extras::{Column, TableBuilder};
-
-fn display_dataframe(ui: &mut egui::Ui, df: &DataFrame) {
-    egui::ScrollArea::both().max_width(500.0).show(ui, |ui| {
-        let column_names = df.get_column_names();
-
-        let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
-        let table = TableBuilder::new(ui)
-            .striped(true)
-            .resizable(true)
-            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-            .columns(Column::auto(), column_names.len() + 1);
-
-        let cols = df.get_columns();
-        table
-            .header(20.0, |mut header| {
-                header.col(|ui| {
-                    ui.strong("index");
-                });
-                for cname in df.get_column_names() {
-                    header.col(|ui| {
-                        ui.strong(cname);
-                    });
-                }
-            })
-            .body(|body| {
-                body.rows(text_height, cols[0].len(), |row_index, mut row| {
-                    row.col(|ui| {
-                        ui.strong(row_index.to_string());
-                    });
-                    for c_idx in 0..column_names.len() {
-                        row.col(|ui| {
-                            ui.label(cols[c_idx].get(row_index).unwrap().to_string());
-                        });
-                    }
-                });
-            });
-    });
-}
-
-fn default_table(ui: &mut egui::Ui) {
-    egui::ScrollArea::both().max_width(500.0).show(ui, |ui| {
-        let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
-        let table = TableBuilder::new(ui)
-            .striped(true)
-            .resizable(true)
-            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-            .column(Column::auto())
-            .column(Column::auto())
-            .column(Column::auto())
-            .column(Column::remainder())
-            .min_scrolled_height(0.0);
-
-        table
-            .header(20.0, |mut header| {
-                header.col(|ui| {
-                    ui.strong("Row");
-                });
-                header.col(|ui| {
-                    ui.strong("Expanding content");
-                });
-                header.col(|ui| {
-                    ui.strong("Clipped text");
-                });
-                header.col(|ui| {
-                    ui.strong("Content");
-                });
-            })
-            .body(|body| {
-                body.rows(text_height, 10000, |row_index, mut row| {
-                    row.col(|ui| {
-                        ui.label(row_index.to_string());
-                    });
-                    row.col(|ui| {
-                        ui.label("test");
-                    });
-                    row.col(|ui| {
-                        ui.label("test");
-                    });
-                });
-            });
-    });
 }
