@@ -20,7 +20,7 @@ use poll_promise::Promise;
 
 use crate::backend_talk;
 use crate::backend_talk::grpc_fs;
-use crate::components::dataframe_table;
+use crate::components::{dataframe_table, plotter_2d};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -91,14 +91,6 @@ impl TemplateApp {
     }
 }
 
-#[derive(Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-enum Enum {
-    First,
-    Second,
-    Third,
-}
-
 impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
@@ -120,6 +112,18 @@ impl eframe::App for TemplateApp {
                 self.d_path_promise = None;
             }
         }
+
+        let df = (|| {
+            if let Some((dname, result)) = &self.hello_promise {
+                if let Some(result) = result.ready() {
+                    if let Ok(result) = result {
+                        self.dataframes.insert(dname.clone(), result.clone());
+                        return result.clone();
+                    }
+                }
+            }
+            DataFrame::default()
+        })();
 
         if self.modal_window_open {
             egui::Window::new("modal")
@@ -275,94 +279,9 @@ impl eframe::App for TemplateApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.set_enabled(!self.modal_window_open);
 
-            egui::Window::new("table").show(ctx, |ui| {
-                let df = (|| {
-                    if let Some((dname, result)) = &self.hello_promise {
-                        if let Some(result) = result.ready() {
-                            if let Ok(result) = result {
-                                self.dataframes.insert(dname.clone(), result.clone());
-                                return result.clone();
-                            }
-                        }
-                    }
-                    DataFrame::default()
-                })();
-                dataframe_table::DataFrameTable::default().show(ui, &df);
-            });
+            dataframe_table::DataFrameTable::default().show(ctx, &df);
+            plotter_2d::Plotter2D::default().show(ctx, &df);
 
-            egui::Window::new("plot").show(ctx, |ui| {
-                let radio = &mut Enum::First;
-                ui.horizontal(|ui| {
-                    ui.label("Select DataFrame");
-                    egui::ComboBox::from_label("")
-                        .selected_text(format!("{radio:?}"))
-                        .show_ui(ui, |ui| {
-                            ui.style_mut().wrap = Some(false);
-                            ui.set_min_width(60.0);
-                            ui.selectable_value(radio, Enum::First, "First");
-                            ui.selectable_value(radio, Enum::Second, "Second");
-                            ui.selectable_value(radio, Enum::Third, "Third");
-                        });
-                });
-                ui.separator();
-                let plot = egui_plot::Plot::new("lines_demo")
-                    .legend(egui_plot::Legend::default())
-                    .data_aspect(1.0)
-                    //.y_axis_width(4)
-                    .x_axis_label("x[m]")
-                    .y_axis_label("y[m]")
-                    .show_axes(true)
-                    .show_grid(true);
-                let time: f64 = 1.0;
-                let ppoints = if let Some((_, result)) = &self.hello_promise {
-                    if let Some(result) = result.ready() {
-                        let xs: Vec<f64> = result
-                            .as_ref()
-                            .unwrap()
-                            .column("column_4")
-                            .unwrap()
-                            .cast(&DataType::Float64)
-                            .unwrap()
-                            .f64()
-                            .unwrap()
-                            .into_no_null_iter()
-                            .collect();
-                        let ys: Vec<f64> = result
-                            .as_ref()
-                            .unwrap()
-                            .column("column_8")
-                            .unwrap()
-                            .cast(&DataType::Float64)
-                            .unwrap()
-                            .f64()
-                            .unwrap()
-                            .into_no_null_iter()
-                            .collect();
-                        let xys: Vec<[f64; 2]> = (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
-                        egui_plot::PlotPoints::new(xys)
-                    } else {
-                        egui_plot::PlotPoints::from_explicit_callback(
-                            move |x| 0.5 * (2.0 * x).sin() * time.sin(),
-                            ..,
-                            512,
-                        )
-                    }
-                } else {
-                    egui_plot::PlotPoints::from_explicit_callback(
-                        move |x| 0.5 * (2.0 * x).sin() * time.sin(),
-                        ..,
-                        512,
-                    )
-                };
-                plot.show(ui, |plot_ui| {
-                    plot_ui.line({
-                        egui_plot::Line::new(ppoints)
-                            //                        .color(Color32::from_rgb(200, 100, 100))
-                            //                       .style(self.line_style)
-                            .name("wave")
-                    });
-                })
-            });
             if !self.organized {
                 // organize windows
                 ui.memory_mut(|mem| mem.reset_areas());
