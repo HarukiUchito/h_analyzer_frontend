@@ -1,26 +1,21 @@
 #[derive(serde::Deserialize, serde::Serialize, PartialEq)]
-enum DataFrameType {
-    NDEV,
-    KITTI,
-}
-
-#[derive(serde::Deserialize, serde::Serialize, PartialEq)]
 enum ExplorerTab {
     FILESYSTEM,
     DATAFRAME,
 }
 
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
-use eframe::{egui, emath::Align2};
+use eframe::egui;
 use polars::prelude::*;
 use poll_promise::Promise;
 
 use crate::backend_talk;
 use crate::backend_talk::grpc_fs;
-use crate::components::{dataframe_table, plotter_2d};
+use crate::components::{dataframe_table, modal_window, plotter_2d};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -32,8 +27,7 @@ pub struct TemplateApp {
     organized: bool,
 
     modal_window_open: bool,
-    dataframe_type: Option<DataFrameType>,
-    filepath_to_be_loaded: Option<String>,
+    dataframe_info: Option<modal_window::DataFrameInfo>,
 
     explorer_tab: ExplorerTab,
     dataframes: HashMap<String, DataFrame>,
@@ -60,8 +54,8 @@ impl Default for TemplateApp {
             backend: backend,
             organized: false,
             modal_window_open: false,
-            dataframe_type: None,
-            filepath_to_be_loaded: None,
+
+            dataframe_info: None,
 
             explorer_tab: ExplorerTab::FILESYSTEM,
             dataframes: HashMap::new(),
@@ -102,6 +96,9 @@ impl eframe::App for TemplateApp {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        //
+        // Data update
+        //
         if let Some(d_path_promise) = &self.d_path_promise {
             if let Some(d_path) = d_path_promise.ready() {
                 log::info!("d_path_promise: {:?}", d_path);
@@ -125,55 +122,23 @@ impl eframe::App for TemplateApp {
             DataFrame::default()
         })();
 
+        if let Some(df_info) = self.dataframe_info.as_mut() {
+            if df_info.load_now {
+                let name = modal_window::get_filename(df_info.filepath.as_str());
+                self.hello_promise =
+                    Some((name, self.backend.load_df_request(df_info.filepath.clone())));
+                self.modal_window_open = false;
+                df_info.load_now = false;
+            }
+        }
+
+        //
+        // View update
+        //
         if self.modal_window_open {
-            egui::Window::new("modal")
-                //                .open(&mut self.modal_window_open)
-                .anchor(Align2::CENTER_TOP, egui::Vec2::new(0.0, 100.0))
-                .show(ctx, |ui| {
-                    let dfname = if let Some(fpath) = self.filepath_to_be_loaded.as_ref() {
-                        let pathv = std::path::Path::new(fpath);
-                        let name = pathv.file_name().unwrap().to_string_lossy().to_string();
-                        ui.label(name.clone());
-                        name
-                    } else {
-                        "null".to_string()
-                    };
-                    ui.label("dataframe type");
-                    if ui
-                        .add(egui::RadioButton::new(
-                            if let Some(dtype) = &self.dataframe_type {
-                                dtype == &DataFrameType::NDEV
-                            } else {
-                                false
-                            },
-                            "NDEV",
-                        ))
-                        .clicked()
-                    {
-                        self.dataframe_type = Some(DataFrameType::NDEV);
-                    }
-                    if ui
-                        .add(egui::RadioButton::new(
-                            if let Some(dtype) = &self.dataframe_type {
-                                dtype == &DataFrameType::KITTI
-                            } else {
-                                false
-                            },
-                            "KITTI",
-                        ))
-                        .clicked()
-                    {
-                        self.dataframe_type = Some(DataFrameType::KITTI);
-                    }
-                    if ui.button("Load File").clicked() {
-                        if let Some(filepath) = &self.filepath_to_be_loaded {
-                            self.hello_promise =
-                                Some((dfname, self.backend.load_df_request(filepath.clone())));
-                            self.filepath_to_be_loaded = None;
-                            self.modal_window_open = false;
-                        }
-                    }
-                });
+            if let Some(mut df_info) = self.dataframe_info.as_mut() {
+                modal_window::ModalWindow::default().show(ctx, &mut df_info);
+            }
         }
         // Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
         // For inspiration and more examples, go to https://emilk.github.io/egui
@@ -254,8 +219,10 @@ impl eframe::App for TemplateApp {
                                             let nfp =
                                                 std::path::Path::new(self.current_path.as_str())
                                                     .join(filename);
-                                            self.filepath_to_be_loaded =
-                                                Some(nfp.to_string_lossy().to_string());
+                                            self.dataframe_info =
+                                                Some(modal_window::DataFrameInfo::new(
+                                                    nfp.to_string_lossy().to_string(),
+                                                ));
                                         }
                                     }
                                 }
