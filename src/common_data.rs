@@ -1,5 +1,5 @@
 use crate::backend_talk;
-use crate::components::modal_window;
+use crate::components::modal_window::{self, LoadState};
 use polars::prelude::*;
 use poll_promise::Promise;
 use std::collections::HashMap;
@@ -7,10 +7,7 @@ use std::collections::HashMap;
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct CommonData {
-    pub modal_window_open: bool,
-    pub dataframe_info: Option<modal_window::DataFrameInfo>,
-
-    pub dataframes: HashMap<String, DataFrame>,
+    pub dataframes: Vec<(modal_window::DataFrameInfo, Option<DataFrame>)>,
     pub current_path: String,
     pub default_path: String,
 
@@ -20,7 +17,7 @@ pub struct CommonData {
     pub fs_list_promise:
         Option<Promise<Result<backend_talk::grpc_fs::ListResponse, tonic::Status>>>,
     #[serde(skip)]
-    pub hello_promise: Option<(String, Promise<Result<DataFrame, tonic::Status>>)>,
+    pub hello_promise: Option<(usize, Promise<Result<DataFrame, tonic::Status>>)>,
     #[serde(skip)]
     pub d_path_promise: Option<Promise<Result<backend_talk::grpc_fs::PathMessage, tonic::Status>>>,
 }
@@ -32,11 +29,8 @@ impl Default for CommonData {
         let fs_list_promise = backend.request_list(path.clone());
         let d_path_promise = backend.request_default_path();
         Self {
-            modal_window_open: false,
-            dataframe_info: None,
-
             backend: backend,
-            dataframes: HashMap::new(),
+            dataframes: Vec::new(),
             current_path: path.clone(),
             default_path: path.clone(),
             fs_list_promise: Some(fs_list_promise),
@@ -60,10 +54,12 @@ impl CommonData {
         }
 
         let df = (|| {
-            if let Some((dname, result)) = &self.hello_promise {
+            if let Some((idx, result)) = &self.hello_promise {
                 if let Some(result) = result.ready() {
                     if let Ok(result) = result {
-                        self.dataframes.insert(dname.clone(), result.clone());
+                        if let Some(entry) = self.dataframes.get_mut(*idx) {
+                            entry.1 = Some(result.clone());
+                        }
                         return result.clone();
                     }
                 }
@@ -71,13 +67,12 @@ impl CommonData {
             DataFrame::default()
         })();
 
-        if let Some(df_info) = self.dataframe_info.as_mut() {
-            if df_info.load_now {
+        for (idx, (df_info, _)) in self.dataframes.iter_mut().enumerate() {
+            if df_info.load_state == LoadState::LOAD_NOW {
                 let name = modal_window::get_filename(df_info.filepath.as_str());
                 self.hello_promise =
-                    Some((name, self.backend.load_df_request(df_info.filepath.clone())));
-                self.modal_window_open = false;
-                df_info.load_now = false;
+                    Some((idx, self.backend.load_df_request(df_info.filepath.clone())));
+                df_info.load_state = LoadState::LOADING;
             }
         }
     }

@@ -1,17 +1,27 @@
-use eframe::egui;
+use std::cmp::Ordering;
+
+use eframe::egui::{self, Order};
 use polars::prelude::*;
 
-#[derive(serde::Deserialize, serde::Serialize, PartialEq)]
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
 pub enum DataFrameType {
     NDEV,
     KITTI,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
+pub enum LoadState {
+    OPEN_MODAL_WINDOW,
+    LOAD_NOW,
+    LOADING,
+    LOADED,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Hash, Clone)]
 pub struct DataFrameInfo {
     pub filepath: String,
     pub df_type: DataFrameType,
-    pub load_now: bool,
+    pub load_state: LoadState,
 }
 
 impl DataFrameInfo {
@@ -19,10 +29,31 @@ impl DataFrameInfo {
         DataFrameInfo {
             filepath: fpath,
             df_type: DataFrameType::NDEV,
-            load_now: false,
+            load_state: LoadState::OPEN_MODAL_WINDOW,
         }
     }
 }
+
+impl Ord for DataFrameInfo {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.filepath.cmp(&other.filepath)
+    }
+}
+
+impl PartialOrd for DataFrameInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for DataFrameInfo {
+    fn eq(&self, other: &Self) -> bool {
+        (self.filepath.clone(), self.df_type, self.load_state)
+            == (other.filepath.clone(), other.df_type, other.load_state)
+    }
+}
+
+impl Eq for DataFrameInfo {}
 
 pub fn get_filename(fullpath: &str) -> String {
     let pathv = std::path::Path::new(fullpath);
@@ -68,7 +99,7 @@ impl ModalWindow {
                     df_info.df_type = DataFrameType::KITTI;
                 }
                 if ui.button("Load File").clicked() {
-                    df_info.load_now = true;
+                    df_info.load_state = LoadState::LOAD_NOW;
                 }
             });
     }

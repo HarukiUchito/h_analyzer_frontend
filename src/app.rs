@@ -12,6 +12,8 @@ pub struct TemplateApp {
 
     #[serde(skip)]
     explorer: explorer::Explorer,
+    #[serde(skip)]
+    dataframe_table: dataframe_table::DataFrameTable,
 
     common_data: common_data::CommonData,
 }
@@ -20,6 +22,7 @@ impl Default for TemplateApp {
     fn default() -> Self {
         Self {
             organized: false,
+            dataframe_table: dataframe_table::DataFrameTable::default(),
             explorer: explorer::Explorer::default(),
             common_data: common_data::CommonData::default(),
         }
@@ -61,14 +64,16 @@ impl eframe::App for TemplateApp {
         //
         // View update
         //
-        if self.common_data.modal_window_open {
-            if let Some(mut df_info) = self.common_data.dataframe_info.as_mut() {
-                modal_window::ModalWindow::default().show(ctx, &mut df_info);
+        let mut opening_modal_window = false;
+        for (df_info, _) in self.common_data.dataframes.iter_mut() {
+            if df_info.load_state == modal_window::LoadState::OPEN_MODAL_WINDOW {
+                modal_window::ModalWindow::default().show(ctx, df_info);
+                opening_modal_window = true;
             }
         }
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            ui.set_enabled(!self.common_data.modal_window_open);
+            ui.set_enabled(!opening_modal_window);
 
             egui::menu::bar(ui, |ui| {
                 #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
@@ -86,10 +91,14 @@ impl eframe::App for TemplateApp {
                 if ui.button("reset layout").clicked() {
                     self.organized = false;
                 }
+
+                if ui.button("reset dataframes").clicked() {
+                    self.common_data.dataframes.clear();
+                }
             });
         });
         egui::SidePanel::left("info").show(ctx, |ui| {
-            ui.set_enabled(!self.common_data.modal_window_open);
+            ui.set_enabled(!opening_modal_window);
 
             ui.heading("h_analyzer");
 
@@ -97,9 +106,9 @@ impl eframe::App for TemplateApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.set_enabled(!self.common_data.modal_window_open);
+            ui.set_enabled(!opening_modal_window);
 
-            dataframe_table::DataFrameTable::default().show(ctx, &self.common_data);
+            self.dataframe_table.show(ctx, &self.common_data);
             plotter_2d::Plotter2D::default().show(ctx, &self.common_data);
 
             if !self.organized {

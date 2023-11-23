@@ -1,6 +1,8 @@
-use crate::common_data;
+use crate::common_data::{self, CommonData};
 use eframe::egui;
 use polars::prelude::*;
+
+use super::modal_window;
 
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -22,12 +24,14 @@ enum Enum {
 
 impl Plotter2D {
     pub fn show(&mut self, ctx: &egui::Context, common_data: &common_data::CommonData) {
-        let keys: Vec<String> = common_data.dataframes.keys().into_vec();
-        let df = if let Some(key) = keys.get(0) {
-            common_data.dataframes.get(key).unwrap().clone()
-        } else {
+        let df = (|| {
+            if let Some((_, dframe)) = common_data.dataframes.get(0) {
+                if let Some(dframe) = dframe {
+                    return dframe.clone();
+                }
+            }
             DataFrame::default()
-        };
+        })();
         egui::Window::new("plot").show(ctx, |ui| {
             let radio = &mut Enum::First;
             ui.horizontal(|ui| {

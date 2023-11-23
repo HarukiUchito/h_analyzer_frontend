@@ -1,7 +1,8 @@
 use crate::common_data::CommonData;
 use crate::components::modal_window;
 use eframe::egui;
-use polars::prelude::*;
+
+use super::modal_window::get_filename;
 
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Clone)]
 enum ExplorerTab {
@@ -73,14 +74,15 @@ impl Explorer {
                                 for filename in fsvec.iter() {
                                     let mut b1 = false;
                                     if ui.checkbox(&mut b1, filename).double_clicked() {
-                                        common_data.modal_window_open = true;
                                         let nfp =
                                             std::path::Path::new(common_data.current_path.as_str())
                                                 .join(filename);
-                                        common_data.dataframe_info =
-                                            Some(modal_window::DataFrameInfo::new(
-                                                nfp.to_string_lossy().to_string(),
-                                            ));
+                                        let fullpath = nfp.to_string_lossy().to_string();
+                                        let id_str = get_filename(fullpath.as_str());
+                                        common_data.dataframes.push((
+                                            modal_window::DataFrameInfo::new(fullpath),
+                                            None,
+                                        ));
                                     }
                                 }
                             }
@@ -96,8 +98,9 @@ impl Explorer {
                 });
             }
             ExplorerTab::DATAFRAME => {
-                for (name, _) in common_data.dataframes.iter() {
+                for (df_info, _) in common_data.dataframes.iter() {
                     let mut checkd = false;
+                    let name = get_filename(&df_info.filepath.as_str());
                     ui.checkbox(&mut checkd, name.clone());
                 }
             }
