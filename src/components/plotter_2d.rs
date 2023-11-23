@@ -1,3 +1,4 @@
+use crate::common_data;
 use eframe::egui;
 use polars::prelude::*;
 
@@ -20,7 +21,13 @@ enum Enum {
 }
 
 impl Plotter2D {
-    pub fn show(&mut self, ctx: &egui::Context, df: &DataFrame) {
+    pub fn show(&mut self, ctx: &egui::Context, common_data: &common_data::CommonData) {
+        let keys: Vec<String> = common_data.dataframes.keys().into_vec();
+        let df = if let Some(key) = keys.get(0) {
+            common_data.dataframes.get(key).unwrap().clone()
+        } else {
+            DataFrame::default()
+        };
         egui::Window::new("plot").show(ctx, |ui| {
             let radio = &mut Enum::First;
             ui.horizontal(|ui| {

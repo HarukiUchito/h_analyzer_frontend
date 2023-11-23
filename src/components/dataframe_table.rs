@@ -1,3 +1,4 @@
+use crate::common_data;
 use eframe::egui;
 use egui_extras::{Column, TableBuilder};
 use polars::prelude::*;
@@ -13,7 +14,13 @@ impl Default for DataFrameTable {
 }
 
 impl DataFrameTable {
-    pub fn show(&mut self, ctx: &egui::Context, df: &DataFrame) {
+    pub fn show(&mut self, ctx: &egui::Context, common_data: &common_data::CommonData) {
+        let keys: Vec<String> = common_data.dataframes.keys().into_vec();
+        let df = if let Some(key) = keys.get(0) {
+            common_data.dataframes.get(key).unwrap().clone()
+        } else {
+            DataFrame::default()
+        };
         egui::Window::new("table").show(ctx, |ui| {
             egui::ScrollArea::both().max_width(500.0).show(ui, |ui| {
                 let column_names = df.get_column_names();
