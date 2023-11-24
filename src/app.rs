@@ -14,6 +14,8 @@ pub struct TemplateApp {
     explorer: explorer::Explorer,
     #[serde(skip)]
     dataframe_table: dataframe_table::DataFrameTable,
+    #[serde(skip)]
+    plotter_2d: plotter_2d::Plotter2D,
 
     common_data: common_data::CommonData,
 }
@@ -23,6 +25,7 @@ impl Default for TemplateApp {
         Self {
             organized: false,
             dataframe_table: dataframe_table::DataFrameTable::default(),
+            plotter_2d: plotter_2d::Plotter2D::default(),
             explorer: explorer::Explorer::default(),
             common_data: common_data::CommonData::default(),
         }
@@ -109,7 +112,7 @@ impl eframe::App for TemplateApp {
             ui.set_enabled(!opening_modal_window);
 
             self.dataframe_table.show(ctx, &self.common_data);
-            plotter_2d::Plotter2D::default().show(ctx, &self.common_data);
+            self.plotter_2d.show(ctx, &self.common_data);
 
             if !self.organized {
                 // organize windows

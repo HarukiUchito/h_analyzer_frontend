@@ -1,4 +1,5 @@
 use crate::common_data::{self, CommonData};
+use crate::components::dataframe_select;
 use eframe::egui;
 use polars::prelude::*;
 
@@ -6,46 +7,22 @@ use super::modal_window;
 
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct Plotter2D {}
+pub struct Plotter2D {
+    dataframe_select: dataframe_select::DataFrameSelect,
+}
 
 impl Default for Plotter2D {
     fn default() -> Self {
-        Self {}
+        Self {
+            dataframe_select: dataframe_select::DataFrameSelect::default(),
+        }
     }
-}
-
-#[derive(Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-enum Enum {
-    First,
-    Second,
-    Third,
 }
 
 impl Plotter2D {
     pub fn show(&mut self, ctx: &egui::Context, common_data: &common_data::CommonData) {
-        let df = (|| {
-            if let Some((_, dframe)) = common_data.dataframes.get(0) {
-                if let Some(dframe) = dframe {
-                    return dframe.clone();
-                }
-            }
-            DataFrame::default()
-        })();
         egui::Window::new("plot").show(ctx, |ui| {
-            let radio = &mut Enum::First;
-            ui.horizontal(|ui| {
-                ui.label("Select DataFrame");
-                egui::ComboBox::from_label("")
-                    .selected_text(format!("{radio:?}"))
-                    .show_ui(ui, |ui| {
-                        ui.style_mut().wrap = Some(false);
-                        ui.set_min_width(60.0);
-                        ui.selectable_value(radio, Enum::First, "First");
-                        ui.selectable_value(radio, Enum::Second, "Second");
-                        ui.selectable_value(radio, Enum::Third, "Third");
-                    });
-            });
+            let df = self.dataframe_select.select(ui, common_data);
             ui.separator();
             let plot = egui_plot::Plot::new("lines_demo")
                 .legend(egui_plot::Legend::default())
