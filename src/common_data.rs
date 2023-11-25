@@ -70,8 +70,11 @@ impl CommonData {
         for (idx, (df_info, _)) in self.dataframes.iter_mut().enumerate() {
             if df_info.load_state == LoadState::LOAD_NOW {
                 let name = modal_window::get_filename(df_info.filepath.as_str());
-                self.hello_promise =
-                    Some((idx, self.backend.load_df_request(df_info.filepath.clone())));
+                self.hello_promise = Some((
+                    idx,
+                    self.backend
+                        .load_df_request(df_info.filepath.clone(), df_info.df_type),
+                ));
                 df_info.load_state = LoadState::LOADING;
             }
         }

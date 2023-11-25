@@ -120,5 +120,9 @@ impl eframe::App for TemplateApp {
                 self.organized = true;
             }
         });
+
+        egui::TopBottomPanel::bottom("bottom").show(ctx, |ui| {
+            ui.label("Progress");
+        });
     }
 }

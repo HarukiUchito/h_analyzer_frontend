@@ -1,3 +1,4 @@
+use crate::components::modal_window;
 use polars::prelude::*;
 use poll_promise::Promise;
 
@@ -47,13 +48,26 @@ impl BackendTalk {
         })
     }
 
-    pub fn load_df_request(&self, filepath: String) -> Promise<Result<DataFrame, tonic::Status>> {
+    pub fn load_df_request(
+        &self,
+        filepath: String,
+        df_type: modal_window::DataFrameType,
+    ) -> Promise<Result<DataFrame, tonic::Status>> {
         let base_url = self.server_address.clone();
         Promise::spawn_local(async move {
             let mut query_client = grpc_fs::polars_service_client::PolarsServiceClient::new(
                 Client::new(base_url.to_string()),
             );
-            let req = grpc_fs::FilenameRequest { filename: filepath };
+
+            let filetype = match df_type {
+                modal_window::DataFrameType::NDEV => grpc_fs::DataFrameType::Ndev,
+                modal_window::DataFrameType::KITTI => grpc_fs::DataFrameType::Kitti,
+            };
+
+            let req = grpc_fs::FileLoadRequest {
+                filename: filepath,
+                filetype: filetype.into(),
+            };
             let mut stream = query_client.load_dataframe(req).await?.into_inner();
 
             let mut cvec = Vec::new();
