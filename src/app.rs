@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
 use crate::common_data;
@@ -17,6 +19,7 @@ pub struct TemplateApp {
     #[serde(skip)]
     plotter_2d: plotter_2d::Plotter2D,
 
+    #[serde(skip)]
     common_data: common_data::CommonData,
 }
 
@@ -78,6 +81,7 @@ impl eframe::App for TemplateApp {
         self.common_data.current_path = self.common_data.default_path.clone();
         eframe::set_value(storage, eframe::APP_KEY, self);
         self.common_data.current_path = current_path;
+        log::info!("saved state");
     }
 
     /// Called each time the UI needs repainting, which may be many times per second.
@@ -120,6 +124,10 @@ impl eframe::App for TemplateApp {
 
                 if ui.button("reset dataframes").clicked() {
                     self.common_data.dataframes.clear();
+                }
+
+                if ui.button("save").clicked() {
+                    self.save(_frame.storage_mut().unwrap());
                 }
             });
         });

@@ -2,7 +2,6 @@ use crate::backend_talk;
 use crate::components::modal_window::{self, LoadState};
 use polars::prelude::*;
 use poll_promise::Promise;
-use std::collections::HashMap;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
