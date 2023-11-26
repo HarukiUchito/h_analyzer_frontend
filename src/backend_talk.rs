@@ -60,6 +60,7 @@ impl BackendTalk {
             );
 
             let filetype = match df_type {
+                modal_window::DataFrameType::COMMA_SEP => grpc_fs::DataFrameType::CommaSep,
                 modal_window::DataFrameType::NDEV => grpc_fs::DataFrameType::Ndev,
                 modal_window::DataFrameType::KITTI => grpc_fs::DataFrameType::Kitti,
             };

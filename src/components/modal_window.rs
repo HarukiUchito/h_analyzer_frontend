@@ -5,6 +5,7 @@ use polars::prelude::*;
 
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
 pub enum DataFrameType {
+    COMMA_SEP,
     NDEV,
     KITTI,
 }
@@ -80,6 +81,15 @@ impl ModalWindow {
                 let name = get_filename(df_info.filepath.as_str());
                 ui.label(name.clone());
                 ui.label("dataframe type");
+                if ui
+                    .add(egui::RadioButton::new(
+                        df_info.df_type == DataFrameType::COMMA_SEP,
+                        "COMMA_SEP",
+                    ))
+                    .clicked()
+                {
+                    df_info.df_type = DataFrameType::COMMA_SEP;
+                }
                 if ui
                     .add(egui::RadioButton::new(
                         df_info.df_type == DataFrameType::NDEV,
