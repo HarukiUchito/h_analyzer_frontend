@@ -128,6 +128,7 @@ impl eframe::App for TemplateApp {
 
                 if ui.button("save").clicked() {
                     self.save(_frame.storage_mut().unwrap());
+                    self.common_data.save_df_list();
                 }
             });
         });

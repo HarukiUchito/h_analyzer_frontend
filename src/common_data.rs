@@ -1,4 +1,4 @@
-use crate::backend_talk;
+use crate::backend_talk::{self, grpc_fs};
 use crate::components::modal_window::{self, LoadState};
 use polars::prelude::*;
 use poll_promise::Promise;
@@ -13,6 +13,11 @@ pub struct CommonData {
     #[serde(skip)]
     pub backend: backend_talk::BackendTalk,
     #[serde(skip)]
+    pub init_df_list_promise:
+        Option<Promise<Result<backend_talk::grpc_fs::DataFrameInfoList, tonic::Status>>>,
+    #[serde(skip)]
+    pub save_df_list_promise: Option<Promise<Result<backend_talk::grpc_fs::Empty, tonic::Status>>>,
+    #[serde(skip)]
     pub fs_list_promise:
         Option<Promise<Result<backend_talk::grpc_fs::ListResponse, tonic::Status>>>,
     #[serde(skip)]
@@ -25,6 +30,7 @@ impl Default for CommonData {
     fn default() -> Self {
         let path = "/".to_string();
         let backend = backend_talk::BackendTalk::default();
+        let init_df_list_promise = backend.request_initial_df_list();
         let fs_list_promise = backend.request_list(path.clone());
         let d_path_promise = backend.request_default_path();
         Self {
@@ -32,6 +38,8 @@ impl Default for CommonData {
             dataframes: Vec::new(),
             current_path: path.clone(),
             default_path: path.clone(),
+            init_df_list_promise: Some(init_df_list_promise),
+            save_df_list_promise: None,
             fs_list_promise: Some(fs_list_promise),
             hello_promise: None,
             d_path_promise: Some(d_path_promise),
@@ -40,7 +48,25 @@ impl Default for CommonData {
 }
 
 impl CommonData {
+    pub fn save_df_list(&mut self) {
+        let mut dfi_list = Vec::new();
+        for (df_info, _) in self.dataframes.iter() {
+            dfi_list.push(grpc_fs::DataFrameInfo {
+                df_path: df_info.filepath.clone(),
+                df_type: df_info.df_type as i32,
+            });
+        }
+        self.save_df_list_promise = Some(self.backend.save_df_list(dfi_list));
+    }
+
     pub fn update(&mut self) {
+        if let Some(init_df_list_promise) = &self.init_df_list_promise {
+            if let Some(init_df_list) = init_df_list_promise.ready() {
+                log::info!("init_df_list {:?}", init_df_list);
+                self.init_df_list_promise = None;
+            }
+        }
+
         if let Some(d_path_promise) = &self.d_path_promise {
             if let Some(d_path) = d_path_promise.ready() {
                 log::info!("d_path_promise: {:?}", d_path);

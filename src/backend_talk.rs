@@ -1,4 +1,4 @@
-use crate::components::modal_window;
+use crate::components::modal_window::{self};
 use polars::prelude::*;
 use poll_promise::Promise;
 
@@ -48,6 +48,39 @@ impl BackendTalk {
         })
     }
 
+    pub fn save_df_list(
+        &self,
+        df_info_list: Vec<grpc_fs::DataFrameInfo>,
+    ) -> Promise<Result<grpc_fs::Empty, tonic::Status>> {
+        let addr = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_fs::polars_service_client::PolarsServiceClient::new(Client::new(addr));
+
+            let req = grpc_fs::DataFrameInfoList { list: df_info_list };
+
+            let resp = query_client.save_data_frame_list(req).await?.into_inner();
+            Ok(resp)
+        })
+    }
+
+    pub fn request_initial_df_list(
+        &self,
+    ) -> Promise<Result<grpc_fs::DataFrameInfoList, tonic::Status>> {
+        let addr = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_fs::polars_service_client::PolarsServiceClient::new(Client::new(addr));
+            let req = grpc_fs::Empty {};
+
+            let resp = query_client
+                .initial_data_frame_list(req)
+                .await?
+                .into_inner();
+            Ok(resp)
+        })
+    }
+
     pub fn load_df_request(
         &self,
         filepath: String,
@@ -69,7 +102,7 @@ impl BackendTalk {
                 filename: filepath,
                 filetype: filetype.into(),
             };
-            let mut stream = query_client.load_dataframe(req).await?.into_inner();
+            let mut stream = query_client.load_data_frame(req).await?.into_inner();
 
             let mut cvec = Vec::new();
             while let Some(cdata) = stream.message().await? {
