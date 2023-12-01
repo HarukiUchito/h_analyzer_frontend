@@ -3,8 +3,8 @@ use crate::components::dataframe_select;
 use eframe::egui;
 use polars::prelude::*;
 
-#[derive(Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+//#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct SeriesInfo {
     x_column: Option<String>,
     y_column: Option<String>,
@@ -19,8 +19,8 @@ impl Default for SeriesInfo {
     }
 }
 
-#[derive(Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+//#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Plotter2D {
     dataframe_select: dataframe_select::DataFrameSelect,
 
@@ -103,18 +103,21 @@ impl Plotter2D {
             };
 
             let extract_series = (|df: &DataFrame, cname: &str| -> Vec<f64> {
-                df.column(cname)
-                    .unwrap()
-                    .cast(&DataType::Float64)
-                    .unwrap()
-                    .f64()
-                    .unwrap()
-                    .into_no_null_iter()
-                    .collect()
+                let col = df.column(cname);
+                if let Ok(col) = col {
+                    col.cast(&DataType::Float64)
+                        .unwrap()
+                        .f64()
+                        .unwrap()
+                        .into_no_null_iter()
+                        .collect()
+                } else {
+                    Vec::new()
+                }
             });
 
             let time: f64 = 1.0;
-            let ppoints = if !df.is_empty() {
+            let ppoints = if false && !df.is_empty() {
                 let xs = extract_series(&df, "column_4");
                 let ys = extract_series(&df, "column_8");
                 let xys: Vec<[f64; 2]> = (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();

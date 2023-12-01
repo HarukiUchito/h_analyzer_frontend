@@ -16,7 +16,7 @@ pub struct TemplateApp {
     explorer: explorer::Explorer,
     #[serde(skip)]
     dataframe_table: dataframe_table::DataFrameTable,
-    #[serde(skip)]
+    //    #[serde(skip)]
     plotter_2d: plotter_2d::Plotter2D,
 
     #[serde(skip)]
