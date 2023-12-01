@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::backend_talk::{self, grpc_fs};
 use crate::components::modal_window::{self, LoadState};
 use polars::prelude::*;
@@ -12,9 +14,13 @@ pub struct CommonData {
 
     #[serde(skip)]
     pub backend: backend_talk::BackendTalk,
+
     #[serde(skip)]
     pub init_df_list_promise:
         Option<Promise<Result<backend_talk::grpc_fs::DataFrameInfoList, tonic::Status>>>,
+    #[serde(skip)]
+    df_to_be_loaded_queue: VecDeque<backend_talk::grpc_fs::DataFrameInfo>,
+
     #[serde(skip)]
     pub save_df_list_promise: Option<Promise<Result<backend_talk::grpc_fs::Empty, tonic::Status>>>,
     #[serde(skip)]
@@ -39,6 +45,7 @@ impl Default for CommonData {
             current_path: path.clone(),
             default_path: path.clone(),
             init_df_list_promise: Some(init_df_list_promise),
+            df_to_be_loaded_queue: VecDeque::new(),
             save_df_list_promise: None,
             fs_list_promise: Some(fs_list_promise),
             hello_promise: None,
@@ -62,9 +69,25 @@ impl CommonData {
     pub fn update(&mut self) {
         if let Some(init_df_list_promise) = &self.init_df_list_promise {
             if let Some(init_df_list) = init_df_list_promise.ready() {
-                log::info!("init_df_list {:?}", init_df_list);
-                self.init_df_list_promise = None;
+                if let Ok(init_df_list) = init_df_list {
+                    for df_info in init_df_list.list.iter() {
+                        self.df_to_be_loaded_queue.push_back(df_info.clone());
+                    }
+                    self.init_df_list_promise = None;
+                }
             }
+        }
+
+        if let Some(df_to_be_loaded) = self.df_to_be_loaded_queue.pop_front() {
+            let mut df_info = modal_window::DataFrameInfo::new(df_to_be_loaded.df_path);
+            df_info.df_type = match df_to_be_loaded.df_type {
+                0 => modal_window::DataFrameType::COMMA_SEP,
+                1 => modal_window::DataFrameType::NDEV,
+                2 => modal_window::DataFrameType::KITTI,
+                _ => unimplemented!(),
+            };
+            df_info.load_state = modal_window::LoadState::LOAD_NOW;
+            self.dataframes.push((df_info, None));
         }
 
         if let Some(d_path_promise) = &self.d_path_promise {
@@ -91,9 +114,12 @@ impl CommonData {
             }
             DataFrame::default()
         })();
+        if !df.is_empty() {
+            self.hello_promise = None;
+        }
 
         for (idx, (df_info, _)) in self.dataframes.iter_mut().enumerate() {
-            if df_info.load_state == LoadState::LOAD_NOW {
+            if df_info.load_state == LoadState::LOAD_NOW && self.hello_promise.is_none() {
                 let name = modal_window::get_filename(df_info.filepath.as_str());
                 self.hello_promise = Some((
                     idx,
