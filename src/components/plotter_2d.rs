@@ -3,9 +3,16 @@ use crate::components::dataframe_select;
 use eframe::egui;
 use polars::prelude::*;
 
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
+pub enum SeriesSource {
+    DATAFRAME,
+    REALTIME_COMMAND,
+}
+
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 //#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct SeriesInfo {
+    source: SeriesSource,
     x_column: Option<String>,
     y_column: Option<String>,
 }
@@ -13,6 +20,7 @@ pub struct SeriesInfo {
 impl Default for SeriesInfo {
     fn default() -> Self {
         Self {
+            source: SeriesSource::DATAFRAME,
             x_column: None,
             y_column: None,
         }
@@ -51,8 +59,28 @@ impl Plotter2D {
                         ui.push_id(idx, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label(format!("Series {}, ", idx));
-                                ui.label("x axis: ");
+                                ui.label("source: ");
                                 egui::ComboBox::from_id_source(0)
+                                    .selected_text(match info.source {
+                                        SeriesSource::DATAFRAME => "DataFrme",
+                                        SeriesSource::REALTIME_COMMAND => "Real Time Command",
+                                    })
+                                    .show_ui(ui, |ui| {
+                                        ui.style_mut().wrap = Some(false);
+                                        ui.set_min_width(60.0);
+                                        ui.selectable_value(
+                                            &mut info.source,
+                                            SeriesSource::DATAFRAME,
+                                            "DataFrame",
+                                        );
+                                        ui.selectable_value(
+                                            &mut info.source,
+                                            SeriesSource::REALTIME_COMMAND,
+                                            "Realtime Command",
+                                        );
+                                    });
+                                ui.label("x axis: ");
+                                egui::ComboBox::from_id_source(1)
                                     .selected_text(info.x_column.as_deref().unwrap_or_default())
                                     .show_ui(ui, |ui| {
                                         ui.style_mut().wrap = Some(false);
@@ -67,7 +95,7 @@ impl Plotter2D {
                                         }
                                     });
                                 ui.label("y axis: ");
-                                egui::ComboBox::from_id_source(1)
+                                egui::ComboBox::from_id_source(2)
                                     .selected_text(info.y_column.as_deref().unwrap_or_default())
                                     .show_ui(ui, |ui| {
                                         ui.style_mut().wrap = Some(false);
@@ -89,6 +117,8 @@ impl Plotter2D {
                         self.series_infos.push(SeriesInfo::default());
                     }
                 });
+
+            ui.separator();
             let plot = egui_plot::Plot::new("lines_demo")
                 .legend(egui_plot::Legend::default())
                 //.y_axis_width(4)
