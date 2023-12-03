@@ -13,6 +13,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "#[derive(serde::Deserialize, serde::Serialize)]",
         )
         .compile(&["../protos/filesystem.proto"], &["../protos"])?;
-    tonic_build::compile_protos("../protos/data_transfer.proto")?;
+    tonic_build::configure()
+        .type_attribute("grpc_data_transfer.SeriesID", "#[derive(Hash, Eq)]")
+        .type_attribute(
+            "grpc_data_transfer.SeriesID",
+            "#[derive(serde::Deserialize, serde::Serialize)]",
+        )
+        .compile(&["../protos/data_transfer.proto"], &["../protos"])?;
     Ok(())
 }

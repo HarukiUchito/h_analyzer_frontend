@@ -6,6 +6,10 @@ pub mod grpc_fs {
     tonic::include_proto!("grpc_fs");
 }
 
+pub mod grpc_data_transfer {
+    tonic::include_proto!("grpc_data_transfer");
+}
+
 pub struct BackendTalk {
     server_address: String,
 }
@@ -16,6 +20,36 @@ impl BackendTalk {
         BackendTalk {
             server_address: "http://192.168.64.2:50051".to_string(),
         }
+    }
+
+    pub fn get_series_list(
+        &self,
+    ) -> Promise<Result<grpc_data_transfer::SeriesIdList, tonic::Status>> {
+        let addr = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_data_transfer::data_transfer2_d_client::DataTransfer2DClient::new(
+                    Client::new(addr),
+                );
+            let req = grpc_data_transfer::Empty {};
+            let resp = query_client.get_series_list(req).await?.into_inner();
+            Ok(resp)
+        })
+    }
+
+    pub fn poll_point_2d_queue(
+        &self,
+        id: grpc_data_transfer::SeriesId,
+    ) -> Promise<Result<grpc_data_transfer::PollPoint2DSeriesResponse, tonic::Status>> {
+        let addr = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_data_transfer::data_transfer2_d_client::DataTransfer2DClient::new(
+                    Client::new(addr),
+                );
+            let resp = query_client.poll_point2_d_queue(id).await?.into_inner();
+            Ok(resp)
+        })
     }
 
     pub fn request_default_path(&self) -> Promise<Result<grpc_fs::PathMessage, tonic::Status>> {

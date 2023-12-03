@@ -1,19 +1,31 @@
+use std::borrow::BorrowMut;
 use std::collections::VecDeque;
 
-use crate::backend_talk::{self, grpc_fs};
+use crate::backend_talk::{self, grpc_data_transfer, grpc_fs};
 use crate::components::modal_window::{self, LoadState};
 use polars::prelude::*;
 use poll_promise::Promise;
+use std::collections::HashMap;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct CommonData {
+    #[serde(skip)]
+    pub backend: backend_talk::BackendTalk,
+
     pub dataframes: Vec<(modal_window::DataFrameInfo, Option<DataFrame>)>,
     pub current_path: String,
     pub default_path: String,
 
+    pub realtime_dataframes: HashMap<grpc_data_transfer::SeriesId, DataFrame>,
     #[serde(skip)]
-    pub backend: backend_talk::BackendTalk,
+    pub realtime_promises: HashMap<
+        grpc_data_transfer::SeriesId,
+        Option<Promise<Result<grpc_data_transfer::PollPoint2DSeriesResponse, tonic::Status>>>,
+    >,
+    #[serde(skip)]
+    pub series_list_promise:
+        Option<Promise<Result<grpc_data_transfer::SeriesIdList, tonic::Status>>>,
 
     #[serde(skip)]
     pub init_df_list_promise:
@@ -44,6 +56,11 @@ impl Default for CommonData {
             dataframes: Vec::new(),
             current_path: path.clone(),
             default_path: path.clone(),
+
+            realtime_dataframes: HashMap::new(),
+            realtime_promises: HashMap::new(),
+            series_list_promise: None,
+
             init_df_list_promise: Some(init_df_list_promise),
             df_to_be_loaded_queue: VecDeque::new(),
             save_df_list_promise: None,
@@ -66,7 +83,73 @@ impl CommonData {
         self.save_df_list_promise = Some(self.backend.save_df_list(dfi_list));
     }
 
+    fn realtime_dataframe_exists(&self, id: &grpc_data_transfer::SeriesId) -> bool {
+        let keys = self
+            .realtime_dataframes
+            .keys()
+            .cloned()
+            .collect::<Vec<grpc_data_transfer::SeriesId>>();
+        keys.contains(id)
+    }
+
+    fn update_realtime_dataframe(&mut self) {
+        if self.series_list_promise.is_none() {
+            self.series_list_promise = Some(self.backend.get_series_list());
+        }
+
+        if let Some(series_list_promise) = &self.series_list_promise {
+            if let Some(series_list) = series_list_promise.ready() {
+                if let Ok(series_list) = series_list {
+                    for sname in series_list.list.iter() {
+                        if self.realtime_dataframe_exists(sname) {
+                            let r_promise_get_opt = self.realtime_promises.get_mut(sname);
+                            if let Some(r_promise_opt) = r_promise_get_opt {
+                                if let Some(r_promise) = r_promise_opt {
+                                    if let Some(new_points) = r_promise.ready() {
+                                        if let Ok(new_points) = new_points {
+                                            let mut xs = Vec::new();
+                                            let mut ys = Vec::new();
+                                            for p in new_points.points.iter() {
+                                                xs.push(p.x);
+                                                ys.push(p.y);
+                                            }
+                                            log::info!("new points {:?}", new_points);
+                                            if let Some(inner_df) =
+                                                self.realtime_dataframes.get_mut(sname)
+                                            {
+                                                let new_df = df!("x[m]" => &xs,
+                                "y[m]" => &ys)
+                                                .unwrap();
+                                                *inner_df = inner_df.vstack(&new_df).unwrap();
+                                            }
+                                        }
+                                    }
+                                    *r_promise_opt = None;
+                                } else {
+                                    *r_promise_opt =
+                                        Some(self.backend.poll_point_2d_queue(sname.clone()));
+                                }
+                            }
+                        } else {
+                            self.realtime_dataframes.insert(
+                                sname.clone(),
+                                df!("x[m]" => &([] as [f64; 0]),
+                                "y[m]" => &([] as [f64; 0]))
+                                .unwrap(),
+                            );
+                            self.realtime_promises.insert(sname.clone(), None);
+                        }
+                        log::info!("s list {:?}", self.realtime_dataframes);
+                    }
+                }
+                self.series_list_promise = None;
+            }
+        }
+    }
+
     pub fn update(&mut self) {
+        self.update_realtime_dataframe();
+
         if let Some(init_df_list_promise) = &self.init_df_list_promise {
             if let Some(init_df_list) = init_df_list_promise.ready() {
                 if let Ok(init_df_list) = init_df_list {
