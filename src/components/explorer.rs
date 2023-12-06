@@ -79,10 +79,10 @@ impl Explorer {
                                                 .join(filename);
                                         let fullpath = nfp.to_string_lossy().to_string();
                                         let id_str = get_filename(fullpath.as_str());
-                                        common_data.dataframes.push((
-                                            modal_window::DataFrameInfo::new(fullpath),
-                                            None,
-                                        ));
+                                        common_data.dataframes.insert(
+                                            common_data.dataframes.len().to_string(),
+                                            ((modal_window::DataFrameInfo::new(fullpath), None)),
+                                        );
                                     }
                                 }
                             }
@@ -98,7 +98,7 @@ impl Explorer {
                 });
             }
             ExplorerTab::DATAFRAME => {
-                for (df_info, _) in common_data.dataframes.iter() {
+                for (_, (df_info, _)) in common_data.dataframes.iter() {
                     let mut checkd = false;
                     let name = get_filename(&df_info.filepath.as_str());
                     ui.checkbox(&mut checkd, name.clone());

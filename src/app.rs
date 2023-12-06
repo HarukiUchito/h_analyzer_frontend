@@ -98,7 +98,7 @@ impl eframe::App for TemplateApp {
         // View update
         //
         let mut opening_modal_window = false;
-        for (df_info, _) in self.common_data.dataframes.iter_mut() {
+        for (_, (df_info, _)) in self.common_data.dataframes.iter_mut() {
             if df_info.load_state == modal_window::LoadState::OPEN_MODAL_WINDOW {
                 modal_window::ModalWindow::default().show(ctx, df_info);
                 opening_modal_window = true;

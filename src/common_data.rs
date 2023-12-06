@@ -13,11 +13,11 @@ pub struct CommonData {
     #[serde(skip)]
     pub backend: backend_talk::BackendTalk,
 
-    pub dataframes: Vec<(modal_window::DataFrameInfo, Option<DataFrame>)>,
+    pub dataframes: HashMap<String, (modal_window::DataFrameInfo, Option<DataFrame>)>,
     pub current_path: String,
     pub default_path: String,
 
-    pub realtime_dataframes: HashMap<grpc_data_transfer::SeriesId, DataFrame>,
+    pub realtime_dataframes: HashMap<String, DataFrame>,
     #[serde(skip)]
     pub realtime_promises: HashMap<
         grpc_data_transfer::SeriesId,
@@ -53,7 +53,7 @@ impl Default for CommonData {
         let d_path_promise = backend.request_default_path();
         Self {
             backend: backend,
-            dataframes: Vec::new(),
+            dataframes: HashMap::new(),
             current_path: path.clone(),
             default_path: path.clone(),
 
@@ -74,7 +74,7 @@ impl Default for CommonData {
 impl CommonData {
     pub fn save_df_list(&mut self) {
         let mut dfi_list = Vec::new();
-        for (df_info, _) in self.dataframes.iter() {
+        for (_, (df_info, _)) in self.dataframes.iter() {
             dfi_list.push(grpc_fs::DataFrameInfo {
                 df_path: df_info.filepath.clone(),
                 df_type: df_info.df_type as i32,
@@ -83,12 +83,12 @@ impl CommonData {
         self.save_df_list_promise = Some(self.backend.save_df_list(dfi_list));
     }
 
-    fn realtime_dataframe_exists(&self, id: &grpc_data_transfer::SeriesId) -> bool {
+    fn realtime_dataframe_exists(&self, id: &String) -> bool {
         let keys = self
             .realtime_dataframes
             .keys()
             .cloned()
-            .collect::<Vec<grpc_data_transfer::SeriesId>>();
+            .collect::<Vec<String>>();
         keys.contains(id)
     }
 
@@ -101,7 +101,8 @@ impl CommonData {
             if let Some(series_list) = series_list_promise.ready() {
                 if let Ok(series_list) = series_list {
                     for sname in series_list.list.iter() {
-                        if self.realtime_dataframe_exists(sname) {
+                        let df_id = sname.id.clone();
+                        if self.realtime_dataframe_exists(&df_id) {
                             let r_promise_get_opt = self.realtime_promises.get_mut(sname);
                             if let Some(r_promise_opt) = r_promise_get_opt {
                                 if let Some(r_promise) = r_promise_opt {
@@ -115,7 +116,7 @@ impl CommonData {
                                             }
                                             log::info!("new points {:?}", new_points);
                                             if let Some(inner_df) =
-                                                self.realtime_dataframes.get_mut(sname)
+                                                self.realtime_dataframes.get_mut(&df_id)
                                             {
                                                 let new_df = df!("x[m]" => &xs,
                                 "y[m]" => &ys)
@@ -132,7 +133,7 @@ impl CommonData {
                             }
                         } else {
                             self.realtime_dataframes.insert(
-                                sname.clone(),
+                                df_id,
                                 df!("x[m]" => &([] as [f64; 0]),
                                 "y[m]" => &([] as [f64; 0]))
                                 .unwrap(),
@@ -170,7 +171,8 @@ impl CommonData {
                 _ => unimplemented!(),
             };
             df_info.load_state = modal_window::LoadState::LOAD_NOW;
-            self.dataframes.push((df_info, None));
+            self.dataframes
+                .insert(self.dataframes.len().to_string(), (df_info, None));
         }
 
         if let Some(d_path_promise) = &self.d_path_promise {
@@ -188,7 +190,7 @@ impl CommonData {
             if let Some((idx, result)) = &self.hello_promise {
                 if let Some(result) = result.ready() {
                     if let Ok(result) = result {
-                        if let Some(entry) = self.dataframes.get_mut(*idx) {
+                        if let Some(entry) = self.dataframes.get_mut(&idx.to_string()) {
                             entry.1 = Some(result.clone());
                         }
                         return result.clone();
@@ -201,7 +203,7 @@ impl CommonData {
             self.hello_promise = None;
         }
 
-        for (idx, (df_info, _)) in self.dataframes.iter_mut().enumerate() {
+        for (idx, (_, (df_info, _))) in self.dataframes.iter_mut().enumerate() {
             if df_info.load_state == LoadState::LOAD_NOW && self.hello_promise.is_none() {
                 let name = modal_window::get_filename(df_info.filepath.as_str());
                 self.hello_promise = Some((
