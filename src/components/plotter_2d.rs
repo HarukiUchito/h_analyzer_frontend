@@ -203,10 +203,42 @@ impl Plotter2D {
                             //                       .style(self.line_style)
                             .name("wave")
                     });
+                    let mut df_select_iter = self.series_df_selectors.iter();
                     for s_info in self.series_infos.iter() {
-                        if let (Some(colx), Some(coly)) = (&s_info.x_column, &s_info.y_column) {
-                            let xs = extract_series(&df, colx.as_str());
-                            let ys = extract_series(&df, coly.as_str());
+                        let df_id = df_select_iter.next();
+                        if df_id.is_none() {
+                            continue;
+                        }
+                        let df_id = df_id.unwrap().dataframe_key.clone();
+                        if df_id.is_none() {
+                            continue;
+                        }
+                        let df_id = df_id.unwrap();
+                        let local_df = match s_info.source {
+                            SeriesSource::DATAFRAME => {
+                                if let Some((_, df_opt)) =
+                                    common_data.dataframes.get(&df_id).as_ref()
+                                {
+                                    df_opt.clone()
+                                } else {
+                                    None
+                                }
+                            }
+                            SeriesSource::REALTIME_COMMAND => {
+                                if let Some(&df_opt) =
+                                    common_data.realtime_dataframes.get(&df_id).as_ref()
+                                {
+                                    Some(df_opt.clone())
+                                } else {
+                                    None
+                                }
+                            }
+                        };
+                        if let (Some(local_df), Some(colx), Some(coly)) =
+                            (local_df, &s_info.x_column, &s_info.y_column)
+                        {
+                            let xs = extract_series(&local_df, colx.as_str());
+                            let ys = extract_series(&local_df, coly.as_str());
                             let xys: Vec<[f64; 2]> =
                                 (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
                             let ppoints = egui_plot::PlotPoints::new(xys);

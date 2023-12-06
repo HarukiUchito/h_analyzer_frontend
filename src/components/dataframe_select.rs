@@ -6,7 +6,7 @@ use super::modal_window::get_filename;
 
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct DataFrameSelect {
-    dataframe_key: Option<String>,
+    pub dataframe_key: Option<String>,
 }
 
 impl Default for DataFrameSelect {
