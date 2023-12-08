@@ -1,19 +1,18 @@
 use std::cmp::Ordering;
 
-use eframe::egui::{self, Order};
-use polars::prelude::*;
+use eframe::egui::{self};
 
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
 pub enum DataFrameType {
-    COMMA_SEP,
+    CommaSep,
     NDEV,
     KITTI,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
 pub enum LoadState {
-    OPEN_MODAL_WINDOW,
-    LOAD_NOW,
+    OpenModalWindow,
+    LoadNow,
     LOADING,
     LOADED,
 }
@@ -30,7 +29,7 @@ impl DataFrameInfo {
         DataFrameInfo {
             filepath: fpath,
             df_type: DataFrameType::NDEV,
-            load_state: LoadState::OPEN_MODAL_WINDOW,
+            load_state: LoadState::OpenModalWindow,
         }
     }
 }
@@ -83,12 +82,12 @@ impl ModalWindow {
                 ui.label("dataframe type");
                 if ui
                     .add(egui::RadioButton::new(
-                        df_info.df_type == DataFrameType::COMMA_SEP,
+                        df_info.df_type == DataFrameType::CommaSep,
                         "COMMA_SEP",
                     ))
                     .clicked()
                 {
-                    df_info.df_type = DataFrameType::COMMA_SEP;
+                    df_info.df_type = DataFrameType::CommaSep;
                 }
                 if ui
                     .add(egui::RadioButton::new(
@@ -109,7 +108,7 @@ impl ModalWindow {
                     df_info.df_type = DataFrameType::KITTI;
                 }
                 if ui.button("Load File").clicked() {
-                    df_info.load_state = LoadState::LOAD_NOW;
+                    df_info.load_state = LoadState::LoadNow;
                 }
             });
     }

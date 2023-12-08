@@ -1,15 +1,13 @@
-use crate::backend_talk::grpc_data_transfer;
 use crate::common_data::{self};
 use crate::components::dataframe_select;
 use eframe::egui;
 use egui_plot::PlotBounds;
 use polars::prelude::*;
-use std::collections::LinkedList;
 
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
 pub enum SeriesSource {
-    DATAFRAME,
-    REALTIME_COMMAND,
+    DataFrame,
+    GRPCClient,
 }
 
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -26,7 +24,7 @@ pub struct SeriesInfo {
 impl Default for SeriesInfo {
     fn default() -> Self {
         Self {
-            source: SeriesSource::DATAFRAME,
+            source: SeriesSource::DataFrame,
             df_id: None,
             visible: true,
             x_column: None,
@@ -39,8 +37,6 @@ impl Default for SeriesInfo {
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 //#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Plotter2D {
-    common_dataframe_select: dataframe_select::DataFrameSelect,
-
     equal_aspect: bool,
     series_infos: Vec<SeriesInfo>,
     series_df_selectors: Vec<dataframe_select::DataFrameSelect>,
@@ -49,7 +45,6 @@ pub struct Plotter2D {
 impl Default for Plotter2D {
     fn default() -> Self {
         Self {
-            common_dataframe_select: dataframe_select::DataFrameSelect::default(),
             equal_aspect: true,
             series_infos: Vec::new(),
             series_df_selectors: Vec::new(),
@@ -72,7 +67,7 @@ impl Plotter2D {
                     .show_ui(ui, |ui| {
                         ui.style_mut().wrap = Some(false);
                         ui.set_min_width(60.0);
-                        for (i, &cname) in df.get_column_names().iter().enumerate() {
+                        for (_, &cname) in df.get_column_names().iter().enumerate() {
                             ui.selectable_value(&mut info.x_column, Some(cname.to_string()), cname);
                         }
                     });
@@ -82,7 +77,7 @@ impl Plotter2D {
                     .show_ui(ui, |ui| {
                         ui.style_mut().wrap = Some(false);
                         ui.set_min_width(60.0);
-                        for (i, &cname) in df.get_column_names().iter().enumerate() {
+                        for (_, &cname) in df.get_column_names().iter().enumerate() {
                             ui.selectable_value(&mut info.y_column, Some(cname.to_string()), cname);
                         }
                     });
@@ -92,7 +87,6 @@ impl Plotter2D {
 
     pub fn show(&mut self, ctx: &egui::Context, common_data: &common_data::CommonData) {
         egui::Window::new("plot").show(ctx, |ui| {
-            let df = self.common_dataframe_select.select_df(0, ui, common_data);
             egui::CollapsingHeader::new("Plot Settings")
                 .default_open(true)
                 .show(ui, |ui| {
@@ -119,31 +113,31 @@ impl Plotter2D {
                                 ui.push_id(format!("df_source_{}", idx), |ui| {
                                     egui::ComboBox::from_id_source(idx)
                                         .selected_text(match info.source {
-                                            SeriesSource::DATAFRAME => "DataFrme",
-                                            SeriesSource::REALTIME_COMMAND => "Real Time Command",
+                                            SeriesSource::DataFrame => "DataFrme",
+                                            SeriesSource::GRPCClient => "GRPC Client",
                                         })
                                         .show_ui(ui, |ui| {
                                             ui.style_mut().wrap = Some(false);
                                             ui.set_min_width(60.0);
                                             ui.selectable_value(
                                                 &mut info.source,
-                                                SeriesSource::DATAFRAME,
+                                                SeriesSource::DataFrame,
                                                 "DataFrame",
                                             );
                                             ui.selectable_value(
                                                 &mut info.source,
-                                                SeriesSource::REALTIME_COMMAND,
-                                                "Realtime Command",
+                                                SeriesSource::GRPCClient,
+                                                "GRPC Client",
                                             );
                                         });
                                 });
                             });
                             ui.horizontal(|ui| {
                                 let series_df = match info.source {
-                                    SeriesSource::DATAFRAME => {
+                                    SeriesSource::DataFrame => {
                                         selector.select_df(idx + 1, ui, common_data)
                                     }
-                                    SeriesSource::REALTIME_COMMAND => {
+                                    SeriesSource::GRPCClient => {
                                         selector.select_backend_df(idx + 1, ui, common_data)
                                     }
                                 };
@@ -185,7 +179,7 @@ impl Plotter2D {
                 plot
             };
 
-            let extract_series = (|df: &DataFrame, cname: &str| -> Vec<f64> {
+            let extract_series = |df: &DataFrame, cname: &str| -> Vec<f64> {
                 let col = df.column(cname);
                 if let Ok(col) = col {
                     col.cast(&DataType::Float64)
@@ -197,71 +191,66 @@ impl Plotter2D {
                 } else {
                     Vec::new()
                 }
-            });
+            };
 
-            if let Some(df) = df {
-                plot.show(ui, |plot_ui| {
-                    let mut df_select_iter = self.series_df_selectors.iter();
-                    for s_info in self.series_infos.iter() {
-                        let df_id = df_select_iter.next();
-                        if df_id.is_none() {
-                            continue;
-                        }
-                        let df_id = df_id.unwrap().dataframe_key.clone();
-                        if df_id.is_none() {
-                            continue;
-                        }
-                        let df_id = df_id.unwrap();
-                        if !s_info.visible {
-                            continue;
-                        }
-                        let local_df = match s_info.source {
-                            SeriesSource::DATAFRAME => {
-                                if let Some((_, df_opt)) =
-                                    common_data.dataframes.get(&df_id).as_ref()
-                                {
-                                    df_opt.clone()
-                                } else {
-                                    None
-                                }
-                            }
-                            SeriesSource::REALTIME_COMMAND => {
-                                if let Some(&df_opt) =
-                                    common_data.realtime_dataframes.get(&df_id).as_ref()
-                                {
-                                    Some(df_opt.clone())
-                                } else {
-                                    None
-                                }
-                            }
-                        };
-                        if let (Some(local_df), Some(colx), Some(coly)) =
-                            (local_df, &s_info.x_column, &s_info.y_column)
-                        {
-                            let xs = extract_series(&local_df, colx.as_str());
-                            let ys = extract_series(&local_df, coly.as_str());
-                            let xys: Vec<[f64; 2]> =
-                                (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
-                            //plot_ui.points(points)
-                            if s_info.track_this {
-                                if let (Some(lx), Some(ly)) = (xs.last(), ys.last()) {
-                                    let range = 0.1;
-                                    plot_ui.set_plot_bounds(PlotBounds::from_min_max(
-                                        [lx - range, ly - range],
-                                        [lx + range, ly + range],
-                                    ));
-                                }
-                            }
-                            plot_ui.points(
-                                egui_plot::Points::new(xys)
-                                    .radius(10.0)
-                                    .filled(false)
-                                    .name(coly.as_str()),
-                            );
-                        }
+            plot.show(ui, |plot_ui| {
+                let mut df_select_iter = self.series_df_selectors.iter();
+                for s_info in self.series_infos.iter() {
+                    let df_id = df_select_iter.next();
+                    if df_id.is_none() {
+                        continue;
                     }
-                });
-            }
+                    let df_id = df_id.unwrap().dataframe_key.clone();
+                    if df_id.is_none() {
+                        continue;
+                    }
+                    let df_id = df_id.unwrap();
+                    if !s_info.visible {
+                        continue;
+                    }
+                    let local_df = match s_info.source {
+                        SeriesSource::DataFrame => {
+                            if let Some((_, df_opt)) = common_data.dataframes.get(&df_id).as_ref() {
+                                df_opt.clone()
+                            } else {
+                                None
+                            }
+                        }
+                        SeriesSource::GRPCClient => {
+                            if let Some(&df_opt) =
+                                common_data.realtime_dataframes.get(&df_id).as_ref()
+                            {
+                                Some(df_opt.clone())
+                            } else {
+                                None
+                            }
+                        }
+                    };
+                    if let (Some(local_df), Some(colx), Some(coly)) =
+                        (local_df, &s_info.x_column, &s_info.y_column)
+                    {
+                        let xs = extract_series(&local_df, colx.as_str());
+                        let ys = extract_series(&local_df, coly.as_str());
+                        let xys: Vec<[f64; 2]> = (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
+                        //plot_ui.points(points)
+                        if s_info.track_this {
+                            if let (Some(lx), Some(ly)) = (xs.last(), ys.last()) {
+                                let range = 0.1;
+                                plot_ui.set_plot_bounds(PlotBounds::from_min_max(
+                                    [lx - range, ly - range],
+                                    [lx + range, ly + range],
+                                ));
+                            }
+                        }
+                        plot_ui.points(
+                            egui_plot::Points::new(xys)
+                                .radius(10.0)
+                                .filled(false)
+                                .name(coly.as_str()),
+                        );
+                    }
+                }
+            });
         });
     }
 }

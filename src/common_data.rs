@@ -1,4 +1,3 @@
-use std::borrow::BorrowMut;
 use std::collections::VecDeque;
 
 use crate::backend_talk::{self, grpc_data_transfer, grpc_fs};
@@ -173,12 +172,12 @@ impl CommonData {
         if let Some(df_to_be_loaded) = self.df_to_be_loaded_queue.pop_front() {
             let mut df_info = modal_window::DataFrameInfo::new(df_to_be_loaded.df_path);
             df_info.df_type = match df_to_be_loaded.df_type {
-                0 => modal_window::DataFrameType::COMMA_SEP,
+                0 => modal_window::DataFrameType::CommaSep,
                 1 => modal_window::DataFrameType::NDEV,
                 2 => modal_window::DataFrameType::KITTI,
                 _ => unimplemented!(),
             };
-            df_info.load_state = modal_window::LoadState::LOAD_NOW;
+            df_info.load_state = modal_window::LoadState::LoadNow;
             self.dataframes
                 .insert(self.dataframes.len().to_string(), (df_info, None));
         }
@@ -212,8 +211,7 @@ impl CommonData {
         }
 
         for (idx, (_, (df_info, _))) in self.dataframes.iter_mut().enumerate() {
-            if df_info.load_state == LoadState::LOAD_NOW && self.hello_promise.is_none() {
-                let name = modal_window::get_filename(df_info.filepath.as_str());
+            if df_info.load_state == LoadState::LoadNow && self.hello_promise.is_none() {
                 self.hello_promise = Some((
                     idx,
                     self.backend

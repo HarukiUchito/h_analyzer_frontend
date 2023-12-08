@@ -47,22 +47,20 @@ impl DataFrameSelect {
 
             ui.push_id(format!("df_backend_select_{}", idx), |ui| {
                 ui.horizontal(|ui| {
-                    if let Some(df) = common_data.realtime_dataframes.get(&df_key) {
-                        ui.label("Select DataFrame");
-                        egui::ComboBox::from_label("")
-                            .selected_text(format!("{}", df_key))
-                            .show_ui(ui, |ui| {
-                                ui.style_mut().wrap = Some(false);
-                                ui.set_min_width(60.0);
-                                for (id, _) in common_data.realtime_dataframes.iter() {
-                                    ui.selectable_value(
-                                        &mut self.dataframe_key,
-                                        Some(id.to_string()),
-                                        id,
-                                    );
-                                }
-                            });
-                    }
+                    ui.label("Select DataFrame");
+                    egui::ComboBox::from_label("")
+                        .selected_text(format!("{}", df_key))
+                        .show_ui(ui, |ui| {
+                            ui.style_mut().wrap = Some(false);
+                            ui.set_min_width(60.0);
+                            for (id, _) in common_data.realtime_dataframes.iter() {
+                                ui.selectable_value(
+                                    &mut self.dataframe_key,
+                                    Some(id.to_string()),
+                                    id,
+                                );
+                            }
+                        });
                 });
             });
 

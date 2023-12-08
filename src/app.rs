@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
 use crate::common_data;
@@ -99,7 +97,7 @@ impl eframe::App for TemplateApp {
         //
         let mut opening_modal_window = false;
         for (_, (df_info, _)) in self.common_data.dataframes.iter_mut() {
-            if df_info.load_state == modal_window::LoadState::OPEN_MODAL_WINDOW {
+            if df_info.load_state == modal_window::LoadState::OpenModalWindow {
                 modal_window::ModalWindow::default().show(ctx, df_info);
                 opening_modal_window = true;
             }

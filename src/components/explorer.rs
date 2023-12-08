@@ -78,10 +78,9 @@ impl Explorer {
                                             std::path::Path::new(common_data.current_path.as_str())
                                                 .join(filename);
                                         let fullpath = nfp.to_string_lossy().to_string();
-                                        let id_str = get_filename(fullpath.as_str());
                                         common_data.dataframes.insert(
                                             common_data.dataframes.len().to_string(),
-                                            ((modal_window::DataFrameInfo::new(fullpath), None)),
+                                            (modal_window::DataFrameInfo::new(fullpath), None),
                                         );
                                     }
                                 }
