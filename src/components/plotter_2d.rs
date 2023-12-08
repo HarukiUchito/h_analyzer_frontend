@@ -2,6 +2,7 @@ use crate::backend_talk::grpc_data_transfer;
 use crate::common_data::{self};
 use crate::components::dataframe_select;
 use eframe::egui;
+use egui_plot::PlotBounds;
 use polars::prelude::*;
 use std::collections::LinkedList;
 
@@ -19,6 +20,7 @@ pub struct SeriesInfo {
     visible: bool,
     x_column: Option<String>,
     y_column: Option<String>,
+    track_this: bool,
 }
 
 impl Default for SeriesInfo {
@@ -29,6 +31,7 @@ impl Default for SeriesInfo {
             visible: true,
             x_column: None,
             y_column: None,
+            track_this: false,
         }
     }
 }
@@ -60,7 +63,6 @@ impl Plotter2D {
         info: &mut SeriesInfo,
         ui: &mut egui::Ui,
         df: Option<&DataFrame>,
-        common_data: &common_data::CommonData,
     ) {
         if let Some(df) = df {
             ui.label("x axis: ");
@@ -135,6 +137,8 @@ impl Plotter2D {
                                             );
                                         });
                                 });
+                            });
+                            ui.horizontal(|ui| {
                                 let series_df = match info.source {
                                     SeriesSource::DATAFRAME => {
                                         selector.select_df(idx + 1, ui, common_data)
@@ -143,14 +147,11 @@ impl Plotter2D {
                                         selector.select_backend_df(idx + 1, ui, common_data)
                                     }
                                 };
+                                Plotter2D::series_settings(idx + 1, info, ui, series_df);
 
-                                Plotter2D::series_settings(
-                                    idx + 1,
-                                    info,
-                                    ui,
-                                    series_df,
-                                    common_data,
-                                );
+                                ui.push_id(format!("track_this_{}", idx), |ui| {
+                                    ui.checkbox(&mut info.track_this, "track_this");
+                                });
                             });
                         }
                     }
@@ -174,6 +175,8 @@ impl Plotter2D {
                 //.y_axis_width(4)
                 .x_axis_label("x[m]")
                 .y_axis_label("y[m]")
+                .auto_bounds_x()
+                .auto_bounds_y()
                 .show_axes(true)
                 .show_grid(true);
             let plot = if self.equal_aspect {
@@ -197,28 +200,7 @@ impl Plotter2D {
             });
 
             if let Some(df) = df {
-                let time: f64 = 1.0;
-                let ppoints = if false && !df.is_empty() {
-                    let xs = extract_series(&df, "column_4");
-                    let ys = extract_series(&df, "column_8");
-                    let xys: Vec<[f64; 2]> = (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
-                    egui_plot::PlotPoints::new(xys)
-                } else {
-                    egui_plot::PlotPoints::new(vec![[0.0, 0.0]])
-                    //                    egui_plot::PlotPoints::from_explicit_callback(
-                    //                        move |x| 0.5 * (2.0 * x).sin() * time.sin(),
-                    //                        ..,
-                    //                        512,
-                    //                    )
-                };
-
                 plot.show(ui, |plot_ui| {
-                    plot_ui.line({
-                        egui_plot::Line::new(ppoints)
-                            //                        .color(Color32::from_rgb(200, 100, 100))
-                            //                       .style(self.line_style)
-                            .name("wave")
-                    });
                     let mut df_select_iter = self.series_df_selectors.iter();
                     for s_info in self.series_infos.iter() {
                         let df_id = df_select_iter.next();
@@ -260,8 +242,22 @@ impl Plotter2D {
                             let ys = extract_series(&local_df, coly.as_str());
                             let xys: Vec<[f64; 2]> =
                                 (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
-                            let ppoints = egui_plot::PlotPoints::new(xys);
-                            plot_ui.line(egui_plot::Line::new(ppoints).name(coly.as_str()));
+                            //plot_ui.points(points)
+                            if s_info.track_this {
+                                if let (Some(lx), Some(ly)) = (xs.last(), ys.last()) {
+                                    let range = 0.1;
+                                    plot_ui.set_plot_bounds(PlotBounds::from_min_max(
+                                        [lx - range, ly - range],
+                                        [lx + range, ly + range],
+                                    ));
+                                }
+                            }
+                            plot_ui.points(
+                                egui_plot::Points::new(xys)
+                                    .radius(10.0)
+                                    .filled(false)
+                                    .name(coly.as_str()),
+                            );
                         }
                     }
                 });
