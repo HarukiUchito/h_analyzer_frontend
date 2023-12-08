@@ -87,7 +87,7 @@ impl eframe::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         //        ctx.request_repaint();
-        ctx.request_repaint_after(std::time::Duration::from_millis(10000));
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
         log::info!("repaint");
         //
         // Data update

@@ -106,22 +106,30 @@ impl CommonData {
                             let r_promise_get_opt = self.realtime_promises.get_mut(sname);
                             if let Some(r_promise_opt) = r_promise_get_opt {
                                 if let Some(r_promise) = r_promise_opt {
-                                    if let Some(new_points) = r_promise.ready() {
-                                        if let Ok(new_points) = new_points {
+                                    if let Some(new_poll) = r_promise.ready() {
+                                        log::warn!("npoll {:?}", new_poll);
+                                        if let Ok(new_poll) = new_poll {
                                             let mut xs = Vec::new();
                                             let mut ys = Vec::new();
-                                            for p in new_points.points.iter() {
+                                            for p in new_poll.points.iter() {
                                                 xs.push(p.x);
                                                 ys.push(p.y);
                                             }
-                                            log::info!("new points {:?}", new_points);
                                             if let Some(inner_df) =
                                                 self.realtime_dataframes.get_mut(&df_id)
                                             {
-                                                let new_df = df!("x[m]" => &xs,
+                                                match new_poll.command {
+                                                    1 => {
+                                                        *inner_df = inner_df.clear();
+                                                    }
+                                                    _ => {
+                                                        let new_df = df!("x[m]" => &xs,
                                 "y[m]" => &ys)
-                                                .unwrap();
-                                                *inner_df = inner_df.vstack(&new_df).unwrap();
+                                                        .unwrap();
+                                                        *inner_df =
+                                                            inner_df.vstack(&new_df).unwrap();
+                                                    }
+                                                }
                                             }
                                         }
                                     }

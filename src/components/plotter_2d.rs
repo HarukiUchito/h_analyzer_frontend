@@ -16,6 +16,7 @@ pub enum SeriesSource {
 pub struct SeriesInfo {
     source: SeriesSource,
     df_id: Option<String>,
+    visible: bool,
     x_column: Option<String>,
     y_column: Option<String>,
 }
@@ -25,6 +26,7 @@ impl Default for SeriesInfo {
         Self {
             source: SeriesSource::DATAFRAME,
             df_id: None,
+            visible: true,
             x_column: None,
             y_column: None,
         }
@@ -37,8 +39,8 @@ pub struct Plotter2D {
     common_dataframe_select: dataframe_select::DataFrameSelect,
 
     equal_aspect: bool,
-    series_infos: LinkedList<SeriesInfo>,
-    series_df_selectors: LinkedList<dataframe_select::DataFrameSelect>,
+    series_infos: Vec<SeriesInfo>,
+    series_df_selectors: Vec<dataframe_select::DataFrameSelect>,
 }
 
 impl Default for Plotter2D {
@@ -46,8 +48,8 @@ impl Default for Plotter2D {
         Self {
             common_dataframe_select: dataframe_select::DataFrameSelect::default(),
             equal_aspect: true,
-            series_infos: LinkedList::new(),
-            series_df_selectors: LinkedList::new(),
+            series_infos: Vec::new(),
+            series_df_selectors: Vec::new(),
         }
     }
 }
@@ -94,14 +96,22 @@ impl Plotter2D {
                 .show(ui, |ui| {
                     ui.checkbox(&mut self.equal_aspect, "Equal Aspect Ratio");
 
+                    let mut del_idx = None;
                     let mut selector_iter = self.series_df_selectors.iter_mut();
-                    for (idx, info) in self.series_infos.iter_mut().enumerate() {
+                    let num = self.series_infos.len();
+                    let mut sinfo_iter = self.series_infos.iter_mut();
+                    for idx in 0..num {
+                        let info = sinfo_iter.next().unwrap();
                         ui.separator();
 
                         if let Some(selector) = selector_iter.next() {
                             ui.horizontal(|ui| {
                                 ui.push_id(idx, |ui| {
                                     ui.label(format!("Series {}, ", idx));
+                                    if ui.button("delete").clicked() {
+                                        del_idx = Some(idx);
+                                    }
+                                    ui.checkbox(&mut info.visible, "visible");
                                     ui.label("source: ");
                                 });
                                 ui.push_id(format!("df_source_{}", idx), |ui| {
@@ -145,11 +155,16 @@ impl Plotter2D {
                         }
                     }
 
+                    if let Some(del_idx) = del_idx {
+                        self.series_infos.remove(del_idx);
+                        self.series_df_selectors.remove(del_idx);
+                    }
+
                     ui.separator();
                     if ui.button("Add Series").clicked() {
-                        self.series_infos.push_back(SeriesInfo::default());
+                        self.series_infos.push(SeriesInfo::default());
                         self.series_df_selectors
-                            .push_back(dataframe_select::DataFrameSelect::default());
+                            .push(dataframe_select::DataFrameSelect::default());
                     }
                 });
 
@@ -189,11 +204,12 @@ impl Plotter2D {
                     let xys: Vec<[f64; 2]> = (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
                     egui_plot::PlotPoints::new(xys)
                 } else {
-                    egui_plot::PlotPoints::from_explicit_callback(
-                        move |x| 0.5 * (2.0 * x).sin() * time.sin(),
-                        ..,
-                        512,
-                    )
+                    egui_plot::PlotPoints::new(vec![[0.0, 0.0]])
+                    //                    egui_plot::PlotPoints::from_explicit_callback(
+                    //                        move |x| 0.5 * (2.0 * x).sin() * time.sin(),
+                    //                        ..,
+                    //                        512,
+                    //                    )
                 };
 
                 plot.show(ui, |plot_ui| {
@@ -214,6 +230,9 @@ impl Plotter2D {
                             continue;
                         }
                         let df_id = df_id.unwrap();
+                        if !s_info.visible {
+                            continue;
+                        }
                         let local_df = match s_info.source {
                             SeriesSource::DATAFRAME => {
                                 if let Some((_, df_opt)) =
