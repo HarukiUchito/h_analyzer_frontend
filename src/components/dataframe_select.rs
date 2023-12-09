@@ -76,39 +76,31 @@ impl DataFrameSelect {
     ) -> Option<&'a DataFrame> {
         let df_key = self.dataframe_key.clone().unwrap_or("0".to_string());
         ui.push_id(format!("df_select_{}", idx), |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal(|ui| -> Option<()> {
                 if common_data.dataframes.len() == 0 {
                     ui.label("Load DataFrame");
                 } else {
-                    if let Some(df_pair) = common_data.dataframes.get(&df_key) {
-                        let (df_info, _) = df_pair;
-                        let fname = get_filename(df_info.filepath.as_str());
-                        ui.label("Select DataFrame");
-                        egui::ComboBox::from_label("")
-                            .selected_text(format!("{}", fname))
-                            .show_ui(ui, |ui| {
-                                ui.style_mut().wrap = Some(false);
-                                ui.set_min_width(60.0);
-                                for (i, (df_info, df)) in common_data.dataframes.iter() {
-                                    if let Some(_) = df {
-                                        let fname = get_filename(df_info.filepath.as_str());
-                                        ui.selectable_value(
-                                            &mut self.dataframe_key,
-                                            Some(i.to_string()),
-                                            fname,
-                                        );
-                                    }
-                                }
-                            });
-                    }
+                    let (df_info, _) = common_data.dataframes.get(&df_key)?;
+                    let fname = get_filename(df_info.filepath.as_str());
+                    ui.label("Select DataFrame");
+                    egui::ComboBox::from_label("")
+                        .selected_text(format!("{}", fname))
+                        .show_ui(ui, |ui| {
+                            ui.style_mut().wrap = Some(false);
+                            ui.set_min_width(60.0);
+                            for (i, (df_info, _)) in common_data.dataframes.iter() {
+                                let fname = get_filename(df_info.filepath.as_str());
+                                ui.selectable_value(
+                                    &mut self.dataframe_key,
+                                    Some(i.to_string()),
+                                    fname,
+                                );
+                            }
+                        });
                 }
+                None
             });
         });
-        if let Some(tp) = common_data.dataframes.get(&df_key) {
-            if let Some(df) = &tp.1 {
-                return Some(df);
-            }
-        }
-        None
+        Some(common_data.dataframes.get(&df_key)?.1.as_ref()?)
     }
 }

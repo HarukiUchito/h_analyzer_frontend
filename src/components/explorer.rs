@@ -45,48 +45,45 @@ impl Explorer {
 
                 ui.separator();
 
-                egui::ScrollArea::both().show(ui, |ui| {
+                egui::ScrollArea::both().show(ui, |ui| -> Option<()> {
                     let mut update_list = false;
-                    if let Some(fs_list) = &common_data.fs_list_promise {
-                        if let Some(fs_list) = fs_list.ready() {
-                            if let Ok(fs_list) = fs_list {
-                                let mut fsvec = fs_list.files.clone();
-                                fsvec.sort();
-                                let mut b1 = false;
-                                let dirname = "..";
-                                if ui.checkbox(&mut b1, dirname).double_clicked() {
-                                    let nfp =
-                                        std::path::Path::new(common_data.current_path.as_str())
-                                            .join(dirname);
-                                    common_data.current_path = nfp.to_string_lossy().into_owned();
-                                    update_list = true;
-                                }
-                                for dirname in fs_list.directories.iter() {
-                                    if ui.checkbox(&mut b1, dirname).double_clicked() {
-                                        let nfp =
-                                            std::path::Path::new(common_data.current_path.as_str())
-                                                .join(dirname);
-                                        common_data.current_path =
-                                            nfp.to_string_lossy().into_owned();
-                                        update_list = true;
-                                    }
-                                }
-                                for filename in fsvec.iter() {
-                                    let mut b1 = false;
-                                    if ui.checkbox(&mut b1, filename).double_clicked() {
-                                        let nfp =
-                                            std::path::Path::new(common_data.current_path.as_str())
-                                                .join(filename);
-                                        let fullpath = nfp.to_string_lossy().to_string();
-                                        common_data.dataframes.insert(
-                                            common_data.dataframes.len().to_string(),
-                                            (modal_window::DataFrameInfo::new(fullpath), None),
-                                        );
-                                    }
-                                }
-                            }
+                    let fs_list = common_data
+                        .fs_list_promise
+                        .as_ref()?
+                        .ready()?
+                        .as_ref()
+                        .ok()?;
+                    let mut fsvec = fs_list.files.clone();
+                    fsvec.sort();
+                    let mut b1 = false;
+                    let dirname = "..";
+                    if ui.checkbox(&mut b1, dirname).double_clicked() {
+                        let nfp =
+                            std::path::Path::new(common_data.current_path.as_str()).join(dirname);
+                        common_data.current_path = nfp.to_string_lossy().into_owned();
+                        update_list = true;
+                    }
+                    for dirname in fs_list.directories.iter() {
+                        if ui.checkbox(&mut b1, dirname).double_clicked() {
+                            let nfp = std::path::Path::new(common_data.current_path.as_str())
+                                .join(dirname);
+                            common_data.current_path = nfp.to_string_lossy().into_owned();
+                            update_list = true;
                         }
                     }
+                    for filename in fsvec.iter() {
+                        let mut b1 = false;
+                        if ui.checkbox(&mut b1, filename).double_clicked() {
+                            let nfp = std::path::Path::new(common_data.current_path.as_str())
+                                .join(filename);
+                            let fullpath = nfp.to_string_lossy().to_string();
+                            common_data.dataframes.insert(
+                                common_data.dataframes.len().to_string(),
+                                (modal_window::DataFrameInfo::new(fullpath), None),
+                            );
+                        }
+                    }
+
                     if update_list {
                         common_data.fs_list_promise = Some(
                             common_data
@@ -94,6 +91,7 @@ impl Explorer {
                                 .request_list(common_data.current_path.to_string()),
                         );
                     }
+                    None
                 });
             }
             ExplorerTab::DATAFRAME => {

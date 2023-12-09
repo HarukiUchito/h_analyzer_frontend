@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use crate::backend_talk::{self, grpc_data_transfer, grpc_fs};
 use crate::components::modal_window::{self, LoadState};
+use crate::unwrap_or_continue;
 use polars::prelude::*;
 use poll_promise::Promise;
 use std::collections::HashMap;
@@ -82,89 +83,65 @@ impl CommonData {
         self.save_df_list_promise = Some(self.backend.save_df_list(dfi_list));
     }
 
-    fn realtime_dataframe_exists(&self, id: &String) -> bool {
-        let keys = self
-            .realtime_dataframes
-            .keys()
-            .cloned()
-            .collect::<Vec<String>>();
-        keys.contains(id)
-    }
-
-    fn update_realtime_dataframe(&mut self) {
+    fn update_realtime_dataframe(&mut self) -> Option<()> {
         if self.series_list_promise.is_none() {
             self.series_list_promise = Some(self.backend.get_series_list());
         }
 
-        if let Some(series_list_promise) = &self.series_list_promise {
-            if let Some(series_list) = series_list_promise.ready() {
-                if let Ok(series_list) = series_list {
-                    for sname in series_list.list.iter() {
-                        let df_id = sname.id.clone();
-                        if self.realtime_dataframe_exists(&df_id) {
-                            let r_promise_get_opt = self.realtime_promises.get_mut(sname);
-                            if let Some(r_promise_opt) = r_promise_get_opt {
-                                if let Some(r_promise) = r_promise_opt {
-                                    if let Some(new_poll) = r_promise.ready() {
-                                        log::warn!("npoll {:?}", new_poll);
-                                        if let Ok(new_poll) = new_poll {
-                                            let mut xs = Vec::new();
-                                            let mut ys = Vec::new();
-                                            for p in new_poll.points.iter() {
-                                                xs.push(p.x);
-                                                ys.push(p.y);
-                                            }
-                                            if let Some(inner_df) =
-                                                self.realtime_dataframes.get_mut(&df_id)
-                                            {
-                                                match new_poll.command {
-                                                    1 => {
-                                                        *inner_df = inner_df.clear();
-                                                    }
-                                                    _ => {
-                                                        let new_df = df!("x[m]" => &xs,
-                                "y[m]" => &ys)
-                                                        .unwrap();
-                                                        *inner_df =
-                                                            inner_df.vstack(&new_df).unwrap();
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    *r_promise_opt = None;
-                                } else {
-                                    *r_promise_opt =
-                                        Some(self.backend.poll_point_2d_queue(sname.clone()));
+        let series_list = self.series_list_promise.as_ref()?.ready()?.as_ref().ok()?;
+        for sname in series_list.list.iter() {
+            let df_id = sname.id.clone();
+            match self.realtime_promises.get_mut(&sname) {
+                Some(r_promise_opt) => {
+                    if r_promise_opt.is_none() {
+                        *r_promise_opt = Some(self.backend.poll_point_2d_queue(sname.clone()));
+                    }
+                    let new_poll = unwrap_or_continue!(r_promise_opt).ready()?;
+                    if let Ok(new_poll) = new_poll {
+                        let mut xs = Vec::new();
+                        let mut ys = Vec::new();
+                        for p in new_poll.points.iter() {
+                            xs.push(p.x);
+                            ys.push(p.y);
+                        }
+                        if let Some(inner_df) = self.realtime_dataframes.get_mut(&df_id) {
+                            match new_poll.command {
+                                1 => {
+                                    *inner_df = inner_df.clear();
+                                }
+                                _ => {
+                                    let new_df = df!("x[m]" => &xs,
+                                    "y[m]" => &ys)
+                                    .unwrap();
+                                    *inner_df = inner_df.vstack(&new_df).unwrap();
                                 }
                             }
-                        } else {
-                            self.realtime_dataframes.insert(
-                                df_id,
-                                df!("x[m]" => &([] as [f64; 0]),
-                                "y[m]" => &([] as [f64; 0]))
-                                .unwrap(),
-                            );
-                            self.realtime_promises.insert(sname.clone(), None);
                         }
-                        log::info!("s list {:?}", self.realtime_dataframes);
                     }
+                    *r_promise_opt = None;
                 }
-                self.series_list_promise = None;
+                None => {
+                    let empty_df = df!("x[m]" => &([] as [f64; 0]),
+                    "y[m]" => &([] as [f64; 0]))
+                    .ok()?;
+                    self.realtime_dataframes.insert(df_id, empty_df);
+                    self.realtime_promises.insert(sname.clone(), None);
+                }
             }
         }
+        self.series_list_promise = None;
+        None
     }
 
     pub fn update(&mut self) {
         self.update_realtime_dataframe();
 
-        if let Some(init_df_list_promise) = &self.init_df_list_promise {
+        if let Some(init_df_list_promise) = self.init_df_list_promise.take() {
             if let Some(init_df_list) = init_df_list_promise.ready() {
                 if let Ok(init_df_list) = init_df_list {
                     for df_info in init_df_list.list.iter() {
                         self.df_to_be_loaded_queue.push_back(df_info.clone());
                     }
-                    self.init_df_list_promise = None;
                 }
             }
         }
@@ -182,14 +159,13 @@ impl CommonData {
                 .insert(self.dataframes.len().to_string(), (df_info, None));
         }
 
-        if let Some(d_path_promise) = &self.d_path_promise {
+        if let Some(d_path_promise) = self.d_path_promise.take() {
             if let Some(d_path) = d_path_promise.ready() {
                 log::info!("d_path_promise: {:?}", d_path);
                 let d_path = d_path.as_ref().unwrap().path.clone();
                 self.current_path = d_path.clone();
                 self.default_path = d_path.clone();
                 self.fs_list_promise = Some(self.backend.request_list(d_path.clone()));
-                self.d_path_promise = None;
             }
         }
 
