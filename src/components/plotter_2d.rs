@@ -3,7 +3,7 @@ use crate::components::dataframe_select;
 
 use crate::unwrap_or_continue;
 
-use eframe::egui;
+use eframe::egui::{self};
 use egui_plot::PlotBounds;
 use polars::prelude::*;
 
@@ -40,6 +40,7 @@ impl Default for SeriesInfo {
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 //#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Plotter2D {
+    title: String,
     equal_aspect: bool,
     series_infos: Vec<SeriesInfo>,
     series_df_selectors: Vec<dataframe_select::DataFrameSelect>,
@@ -48,6 +49,7 @@ pub struct Plotter2D {
 impl Default for Plotter2D {
     fn default() -> Self {
         Self {
+            title: "".to_string(),
             equal_aspect: true,
             series_infos: Vec::new(),
             series_df_selectors: Vec::new(),
@@ -93,7 +95,13 @@ impl Plotter2D {
             egui::CollapsingHeader::new("Plot Settings")
                 .default_open(true)
                 .show(ui, |ui| {
-                    ui.checkbox(&mut self.equal_aspect, "Equal Aspect Ratio");
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.title)
+                                .hint_text("title of the plot"),
+                        );
+                        ui.checkbox(&mut self.equal_aspect, "Equal Aspect Ratio");
+                    });
 
                     let mut del_idx = None;
                     let mut selector_iter = self.series_df_selectors.iter_mut();
@@ -166,6 +174,9 @@ impl Plotter2D {
                 });
 
             ui.separator();
+            ui.vertical_centered(|ui| {
+                ui.label(&self.title);
+            });
             let plot = egui_plot::Plot::new("lines_demo")
                 .legend(egui_plot::Legend::default())
                 //.y_axis_width(4)
