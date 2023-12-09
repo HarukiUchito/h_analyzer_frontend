@@ -2,13 +2,8 @@ use crate::components::modal_window::{self};
 use polars::prelude::*;
 use poll_promise::Promise;
 
-pub mod grpc_fs {
-    tonic::include_proto!("grpc_fs");
-}
-
-pub mod grpc_data_transfer {
-    tonic::include_proto!("grpc_data_transfer");
-}
+pub use h_analyzer_grpc::grpc_data_transfer;
+pub use h_analyzer_grpc::grpc_fs;
 
 pub struct BackendTalk {
     server_address: String,
