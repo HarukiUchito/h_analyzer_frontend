@@ -16,6 +16,7 @@ pub enum SeriesSource {
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 //#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct SeriesInfo {
+    title: String,
     source: SeriesSource,
     df_id: Option<String>,
     visible: bool,
@@ -27,6 +28,7 @@ pub struct SeriesInfo {
 impl Default for SeriesInfo {
     fn default() -> Self {
         Self {
+            title: "".to_string(),
             source: SeriesSource::DataFrame,
             df_id: None,
             visible: true,
@@ -115,6 +117,10 @@ impl Plotter2D {
                         ui.horizontal(|ui| {
                             ui.push_id(idx, |ui| {
                                 ui.label(format!("Series {}, ", idx));
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut info.title)
+                                        .hint_text("title of the series"),
+                                );
                                 if ui.button("delete").clicked() {
                                     del_idx = Some(idx);
                                 }
@@ -246,7 +252,7 @@ impl Plotter2D {
                         egui_plot::Points::new(xys)
                             .radius(10.0)
                             .filled(false)
-                            .name(coly.as_str()),
+                            .name(&s_info.title),
                     );
                 }
             });
