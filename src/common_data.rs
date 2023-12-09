@@ -136,13 +136,14 @@ impl CommonData {
     pub fn update(&mut self) {
         self.update_realtime_dataframe();
 
-        if let Some(init_df_list_promise) = self.init_df_list_promise.take() {
+        if let Some(init_df_list_promise) = &self.init_df_list_promise {
             if let Some(init_df_list) = init_df_list_promise.ready() {
                 if let Ok(init_df_list) = init_df_list {
                     for df_info in init_df_list.list.iter() {
                         self.df_to_be_loaded_queue.push_back(df_info.clone());
                     }
                 }
+                self.init_df_list_promise = None;
             }
         }
 
@@ -159,13 +160,16 @@ impl CommonData {
                 .insert(self.dataframes.len().to_string(), (df_info, None));
         }
 
-        if let Some(d_path_promise) = self.d_path_promise.take() {
+        // take should not be used in following line because taken promise must be put it back if it's not ready
+        if let Some(d_path_promise) = &self.d_path_promise {
             if let Some(d_path) = d_path_promise.ready() {
                 log::info!("d_path_promise: {:?}", d_path);
                 let d_path = d_path.as_ref().unwrap().path.clone();
                 self.current_path = d_path.clone();
                 self.default_path = d_path.clone();
                 self.fs_list_promise = Some(self.backend.request_list(d_path.clone()));
+
+                self.d_path_promise = None;
             }
         }
 
