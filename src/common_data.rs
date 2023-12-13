@@ -24,6 +24,11 @@ pub struct CommonData {
         Option<Promise<Result<grpc_data_transfer::PollPoint2DSeriesResponse, tonic::Status>>>,
     >,
     #[serde(skip)]
+    pub realtime_pose_2d_promises: HashMap<
+        grpc_data_transfer::SeriesId,
+        Option<Promise<Result<grpc_data_transfer::PollPose2DSeriesResponse, tonic::Status>>>,
+    >,
+    #[serde(skip)]
     pub series_list_promise:
         Option<Promise<Result<grpc_data_transfer::SeriesIdList, tonic::Status>>>,
 
@@ -59,6 +64,7 @@ impl Default for CommonData {
 
             realtime_dataframes: HashMap::new(),
             realtime_promises: HashMap::new(),
+            realtime_pose_2d_promises: HashMap::new(),
             series_list_promise: None,
 
             init_df_list_promise: Some(init_df_list_promise),
@@ -89,6 +95,7 @@ impl CommonData {
         }
 
         let series_list = self.series_list_promise.as_ref()?.ready()?.as_ref().ok()?;
+        log::info!("{:?}", series_list);
         for sname in series_list.list.iter() {
             let df_id = sname.id.clone();
             match self.realtime_promises.get_mut(&sname) {
