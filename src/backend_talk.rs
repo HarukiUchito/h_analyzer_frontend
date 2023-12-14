@@ -9,6 +9,11 @@ pub struct BackendTalk {
     server_address: String,
 }
 
+pub enum ResponseType {
+    Point2D(grpc_data_transfer::PollPoint2DSeriesResponse),
+    Pose2D(grpc_data_transfer::PollPose2DSeriesResponse),
+}
+
 use tonic_web_wasm_client::Client;
 impl BackendTalk {
     pub fn default() -> Self {
@@ -19,7 +24,7 @@ impl BackendTalk {
 
     pub fn get_series_list(
         &self,
-    ) -> Promise<Result<grpc_data_transfer::SeriesIdList, tonic::Status>> {
+    ) -> Promise<Result<grpc_data_transfer::SeriesMetadataList, tonic::Status>> {
         let addr = self.server_address.clone();
         Promise::spawn_local(async move {
             let mut query_client =
@@ -35,7 +40,7 @@ impl BackendTalk {
     pub fn poll_point_2d_queue(
         &self,
         id: grpc_data_transfer::SeriesId,
-    ) -> Promise<Result<grpc_data_transfer::PollPoint2DSeriesResponse, tonic::Status>> {
+    ) -> Promise<Result<ResponseType, tonic::Status>> {
         let addr = self.server_address.clone();
         Promise::spawn_local(async move {
             let mut query_client =
@@ -43,7 +48,22 @@ impl BackendTalk {
                     Client::new(addr),
                 );
             let resp = query_client.poll_point2_d_queue(id).await?.into_inner();
-            Ok(resp)
+            Ok(ResponseType::Point2D((resp)))
+        })
+    }
+
+    pub fn poll_pose_2d_queue(
+        &self,
+        id: grpc_data_transfer::SeriesId,
+    ) -> Promise<Result<ResponseType, tonic::Status>> {
+        let addr = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_data_transfer::data_transfer2_d_client::DataTransfer2DClient::new(
+                    Client::new(addr),
+                );
+            let resp = query_client.poll_pose2_d_queue(id).await?.into_inner();
+            Ok(ResponseType::Pose2D((resp)))
         })
     }
 

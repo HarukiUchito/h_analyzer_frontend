@@ -1542,7 +1542,7 @@ dependencies = [
 [[package]]
 name = "h_analyzer_grpc"
 version = "0.1.0"
-source = "git+https://github.com/HarukiUchito/h_analyzer_grpc.git#2a0bb53e944f5b36d03b98f73a3d3379ff5f7b97"
+source = "git+https://github.com/HarukiUchito/h_analyzer_grpc.git#b2e7773deeb79fd4cf6875e6388f6c5df57de2c7"
 dependencies = [
  "prost",
  "serde",

@@ -21,16 +21,11 @@ pub struct CommonData {
     #[serde(skip)]
     pub realtime_promises: HashMap<
         grpc_data_transfer::SeriesId,
-        Option<Promise<Result<grpc_data_transfer::PollPoint2DSeriesResponse, tonic::Status>>>,
-    >,
-    #[serde(skip)]
-    pub realtime_pose_2d_promises: HashMap<
-        grpc_data_transfer::SeriesId,
-        Option<Promise<Result<grpc_data_transfer::PollPose2DSeriesResponse, tonic::Status>>>,
+        Option<Promise<Result<backend_talk::ResponseType, tonic::Status>>>,
     >,
     #[serde(skip)]
     pub series_list_promise:
-        Option<Promise<Result<grpc_data_transfer::SeriesIdList, tonic::Status>>>,
+        Option<Promise<Result<grpc_data_transfer::SeriesMetadataList, tonic::Status>>>,
 
     #[serde(skip)]
     pub init_df_list_promise:
@@ -64,7 +59,6 @@ impl Default for CommonData {
 
             realtime_dataframes: HashMap::new(),
             realtime_promises: HashMap::new(),
-            realtime_pose_2d_promises: HashMap::new(),
             series_list_promise: None,
 
             init_df_list_promise: Some(init_df_list_promise),
@@ -96,31 +90,58 @@ impl CommonData {
 
         let series_list = self.series_list_promise.as_ref()?.ready()?.as_ref().ok()?;
         log::info!("{:?}", series_list);
-        for sname in series_list.list.iter() {
-            let df_id = sname.id.clone();
-            match self.realtime_promises.get_mut(&sname) {
+        for metadata in series_list.list.iter() {
+            let df_id = unwrap_or_continue!(metadata.clone().id);
+            let df_id_str = df_id.id.clone();
+            match self.realtime_promises.get_mut(&df_id) {
                 Some(r_promise_opt) => {
                     if r_promise_opt.is_none() {
-                        *r_promise_opt = Some(self.backend.poll_point_2d_queue(sname.clone()));
+                        *r_promise_opt = Some(match metadata.element_type {
+                            0 => self.backend.poll_point_2d_queue(df_id.clone()),
+                            1 => self.backend.poll_pose_2d_queue(df_id.clone()),
+                            _ => panic!("unexpected element type"),
+                        });
                     }
                     let new_poll = unwrap_or_continue!(r_promise_opt).ready()?;
                     if let Ok(new_poll) = new_poll {
                         let mut xs = Vec::new();
                         let mut ys = Vec::new();
-                        for p in new_poll.points.iter() {
-                            xs.push(p.x);
-                            ys.push(p.y);
-                        }
-                        if let Some(inner_df) = self.realtime_dataframes.get_mut(&df_id) {
-                            match new_poll.command {
-                                1 => {
-                                    *inner_df = inner_df.clear();
+                        let mut ts = Vec::new();
+                        let mut command = None;
+                        match new_poll {
+                            backend_talk::ResponseType::Point2D(points) => {
+                                command = Some(points.command);
+                                for p in points.points.iter() {
+                                    xs.push(p.x);
+                                    ys.push(p.y);
                                 }
-                                _ => {
-                                    let new_df = df!("x[m]" => &xs,
+                            }
+                            backend_talk::ResponseType::Pose2D(poses) => {
+                                command = Some(poses.command);
+                                for p in poses.poses.iter() {
+                                    xs.push(p.position.as_ref().unwrap().x);
+                                    ys.push(p.position.as_ref().unwrap().y);
+                                    ts.push(p.theta);
+                                }
+                            }
+                        }
+                        if let Some(inner_df) = self.realtime_dataframes.get_mut(&df_id_str) {
+                            if let Some(command) = command {
+                                match command {
+                                    1 => {
+                                        *inner_df = inner_df.clear();
+                                    }
+                                    _ => {
+                                        let new_df = match metadata.element_type {
+                                            0 => df!("x[m]" => &xs,
                                     "y[m]" => &ys)
-                                    .unwrap();
-                                    *inner_df = inner_df.vstack(&new_df).unwrap();
+                                            .unwrap(),
+                                            1 => 
+                                                df!("x[m]" => &xs, "y[m]" => &ys, "theta[rad]" => &ts).unwrap(),
+                                            _ => panic!("unexpected element type"),
+                                        };
+                                        *inner_df = inner_df.vstack(&new_df).unwrap();
+                                    }
                                 }
                             }
                         }
@@ -128,11 +149,17 @@ impl CommonData {
                     *r_promise_opt = None;
                 }
                 None => {
-                    let empty_df = df!("x[m]" => &([] as [f64; 0]),
+                    let empty_df = match metadata.element_type {
+                        0 => df!("x[m]" => &([] as [f64; 0]),
                     "y[m]" => &([] as [f64; 0]))
-                    .ok()?;
-                    self.realtime_dataframes.insert(df_id, empty_df);
-                    self.realtime_promises.insert(sname.clone(), None);
+                        .ok()?,
+                        1 => df!("x[m]" => &([] as [f64; 0]),
+                        "y[m]" => &([] as [f64; 0]), "theta[rad]" => &([] as [f64; 0]))
+                        .ok()?,
+                        _ => panic!("unexpected element type"),
+                    };
+                    self.realtime_dataframes.insert(df_id_str, empty_df);
+                    self.realtime_promises.insert(df_id.clone(), None);
                 }
             }
         }
