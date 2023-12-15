@@ -48,7 +48,7 @@ impl BackendTalk {
                     Client::new(addr),
                 );
             let resp = query_client.poll_point2_d_queue(id).await?.into_inner();
-            Ok(ResponseType::Point2D((resp)))
+            Ok(ResponseType::Point2D(resp))
         })
     }
 
@@ -63,7 +63,7 @@ impl BackendTalk {
                     Client::new(addr),
                 );
             let resp = query_client.poll_pose2_d_queue(id).await?.into_inner();
-            Ok(ResponseType::Pose2D((resp)))
+            Ok(ResponseType::Pose2D(resp))
         })
     }
 

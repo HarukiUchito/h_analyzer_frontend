@@ -13,15 +13,24 @@ pub enum SeriesSource {
     GRPCClient,
 }
 
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
+pub enum PlotType {
+    Point,
+    Pose,
+}
+
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 //#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct SeriesInfo {
     title: String,
     source: SeriesSource,
+    plot_type: PlotType,
     df_id: Option<String>,
     visible: bool,
     x_column: Option<String>,
     y_column: Option<String>,
+    theta_column: Option<String>,
+    marker_radius: f64,
     track_this: bool,
 }
 
@@ -30,10 +39,13 @@ impl Default for SeriesInfo {
         Self {
             title: "".to_string(),
             source: SeriesSource::DataFrame,
+            plot_type: PlotType::Point,
             df_id: None,
             visible: true,
             x_column: None,
             y_column: None,
+            theta_column: None,
+            marker_radius: 1.0,
             track_this: false,
         }
     }
@@ -67,28 +79,45 @@ impl Plotter2D {
         df: Option<&DataFrame>,
     ) -> Option<()> {
         let df = df?;
-        ui.push_id(idx, |ui| {
-            ui.label("x axis: ");
-            egui::ComboBox::from_id_source(format!("x_select_{}", idx))
-                .selected_text(info.x_column.as_deref().unwrap_or_default())
+        ui.label("x axis: ");
+        egui::ComboBox::from_id_source(format!("x_select_{}", idx))
+            .selected_text(info.x_column.as_deref().unwrap_or_default())
+            .show_ui(ui, |ui| {
+                ui.style_mut().wrap = Some(false);
+                ui.set_min_width(60.0);
+                for (_, &cname) in df.get_column_names().iter().enumerate() {
+                    ui.selectable_value(&mut info.x_column, Some(cname.to_string()), cname);
+                }
+            });
+        ui.label("y axis: ");
+        egui::ComboBox::from_id_source(format!("y_select_{}", idx))
+            .selected_text(info.y_column.as_deref().unwrap_or_default())
+            .show_ui(ui, |ui| {
+                ui.style_mut().wrap = Some(false);
+                ui.set_min_width(60.0);
+                for (_, &cname) in df.get_column_names().iter().enumerate() {
+                    ui.selectable_value(&mut info.y_column, Some(cname.to_string()), cname);
+                }
+            });
+        if info.plot_type == PlotType::Pose {
+            ui.label("yaw: ");
+            egui::ComboBox::from_id_source(format!("theta_select_{}", idx))
+                .selected_text(info.theta_column.as_deref().unwrap_or_default())
                 .show_ui(ui, |ui| {
                     ui.style_mut().wrap = Some(false);
                     ui.set_min_width(60.0);
                     for (_, &cname) in df.get_column_names().iter().enumerate() {
-                        ui.selectable_value(&mut info.x_column, Some(cname.to_string()), cname);
+                        ui.selectable_value(&mut info.theta_column, Some(cname.to_string()), cname);
                     }
                 });
-            ui.label("y axis: ");
-            egui::ComboBox::from_id_source(format!("y_select_{}", idx))
-                .selected_text(info.y_column.as_deref().unwrap_or_default())
-                .show_ui(ui, |ui| {
-                    ui.style_mut().wrap = Some(false);
-                    ui.set_min_width(60.0);
-                    for (_, &cname) in df.get_column_names().iter().enumerate() {
-                        ui.selectable_value(&mut info.y_column, Some(cname.to_string()), cname);
-                    }
-                });
-        });
+            ui.add(
+                egui::DragValue::new(&mut info.marker_radius)
+                    .speed(0.1)
+                    .clamp_range(0.0..=f64::INFINITY)
+                    .prefix("marker size: "),
+            );
+        }
+
         None
     }
 
@@ -115,7 +144,7 @@ impl Plotter2D {
 
                         let selector = unwrap_or_continue!(selector_iter.next());
                         ui.horizontal(|ui| {
-                            ui.push_id(idx, |ui| {
+                            ui.push_id(format!("sname_{}", idx), |ui| {
                                 ui.label(format!("Series {}, ", idx));
                                 ui.add(
                                     egui::TextEdit::singleline(&mut info.title)
@@ -149,8 +178,9 @@ impl Plotter2D {
                                     });
                             });
                         });
+                        let mut series_df = None;
                         ui.horizontal(|ui| {
-                            let series_df = match info.source {
+                            series_df = match info.source {
                                 SeriesSource::DataFrame => {
                                     selector.select_df(idx + 1, ui, common_data)
                                 }
@@ -158,6 +188,28 @@ impl Plotter2D {
                                     selector.select_backend_df(idx + 1, ui, common_data)
                                 }
                             };
+                            ui.label("Plot Type");
+                            egui::ComboBox::from_id_source(format!("plot_type_select_{}", idx))
+                                .selected_text(match info.plot_type {
+                                    PlotType::Point => "Point",
+                                    PlotType::Pose => "Pose",
+                                })
+                                .show_ui(ui, |ui| {
+                                    ui.style_mut().wrap = Some(false);
+                                    ui.set_min_width(60.0);
+                                    ui.selectable_value(
+                                        &mut info.plot_type,
+                                        PlotType::Point,
+                                        "Point",
+                                    );
+                                    ui.selectable_value(
+                                        &mut info.plot_type,
+                                        PlotType::Pose,
+                                        "Pose",
+                                    );
+                                });
+                        });
+                        ui.horizontal(|ui| {
                             Plotter2D::series_settings(idx + 1, info, ui, series_df);
 
                             ui.push_id(format!("track_this_{}", idx), |ui| {
@@ -248,12 +300,37 @@ impl Plotter2D {
                             ));
                         }
                     }
-                    plot_ui.points(
-                        egui_plot::Points::new(xys)
-                            .radius(10.0)
-                            .filled(false)
-                            .name(&s_info.title),
-                    );
+                    match s_info.plot_type {
+                        PlotType::Point => {
+                            plot_ui.points(
+                                egui_plot::Points::new(xys)
+                                    .radius(10.0)
+                                    .filled(false)
+                                    .name(&s_info.title),
+                            );
+                        }
+                        PlotType::Pose => {
+                            let col_theta = unwrap_or_continue!(&s_info.theta_column);
+                            let ts = extract_series(&local_df, col_theta.as_str());
+                            let xys2: Vec<[f64; 2]> = (0..xs.len())
+                                .map(|i| {
+                                    [
+                                        xs[i] + s_info.marker_radius * ts[i].cos(),
+                                        ys[i] + s_info.marker_radius * ts[i].sin(),
+                                    ]
+                                })
+                                .collect();
+                            let arrows = egui_plot::Arrows::new(xys.clone(), xys2);
+                            plot_ui.arrows(arrows);
+
+                            plot_ui.points(
+                                egui_plot::Points::new(xys)
+                                    .radius(10.0)
+                                    .filled(false)
+                                    .name(&s_info.title),
+                            );
+                        }
+                    }
                 }
             });
         });
