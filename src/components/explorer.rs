@@ -1,4 +1,4 @@
-use crate::common_data::CommonData;
+use crate::common_data::{self, CommonData};
 use crate::components::modal_window;
 use eframe::egui;
 
@@ -25,7 +25,17 @@ impl Default for Explorer {
 }
 
 impl Explorer {
-    pub fn show(&mut self, ui: &mut egui::Ui, common_data: &mut CommonData) {
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        common_data_arc: std::sync::Arc<std::sync::Mutex<CommonData>>,
+    ) {
+        let common_data = common_data_arc.try_lock();
+        if common_data.is_err() {
+            return;
+        }
+        let mut common_data = common_data.unwrap();
+
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.explorer_tab, ExplorerTab::FILESYSTEM, "Files");
             ui.selectable_value(&mut self.explorer_tab, ExplorerTab::DATAFRAME, "DataFrames");
@@ -52,7 +62,8 @@ impl Explorer {
                         .as_ref()?
                         .ready()?
                         .as_ref()
-                        .ok()?;
+                        .ok()?
+                        .clone();
                     let mut fsvec = fs_list.files.clone();
                     fsvec.sort();
                     let mut b1 = false;
@@ -76,11 +87,11 @@ impl Explorer {
                         if ui.checkbox(&mut b1, filename).double_clicked() {
                             let nfp = std::path::Path::new(common_data.current_path.as_str())
                                 .join(filename);
+                            let key = common_data.dataframes.len().to_string().clone();
                             let fullpath = nfp.to_string_lossy().to_string();
-                            common_data.dataframes.insert(
-                                common_data.dataframes.len().to_string(),
-                                (modal_window::DataFrameInfo::new(fullpath), None),
-                            );
+                            common_data
+                                .dataframes
+                                .insert(key, (modal_window::DataFrameInfo::new(fullpath), None));
                         }
                     }
 

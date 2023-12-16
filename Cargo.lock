@@ -980,6 +980,7 @@ dependencies = [
  "eframe",
  "egui_extras",
  "egui_plot",
+ "egui_tiles",
  "env_logger",
  "h_analyzer_grpc",
  "log",
@@ -1062,6 +1063,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7f33a00fe8eb1ba56535b3dbacdecc7a1365a328908a97c5f3c81bb466be72b"
 dependencies = [
  "egui",
+]
+
+[[package]]
+name = "egui_tiles"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54986fb00d53325eaa4033cb5d8b1c1a77d4173fa3ed0d6602c6a542b151ace9"
+dependencies = [
+ "ahash",
+ "egui",
+ "itertools",
+ "log",
+ "serde",
 ]
 
 [[package]]

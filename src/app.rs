@@ -8,27 +8,64 @@ use eframe::egui::{self, FontData};
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
-    organized: bool,
+    tree: egui_tiles::Tree<Pane>,
+
+    #[serde(skip)]
+    behavior: TreeBehavior,
+
+    #[serde(skip)]
+    last_tree_debug: String,
 
     #[serde(skip)]
     explorer: explorer::Explorer,
-    #[serde(skip)]
-    dataframe_table: dataframe_table::DataFrameTable,
-    //    #[serde(skip)]
+
     plotter_2d: plotter_2d::Plotter2D,
 
     #[serde(skip)]
-    common_data: common_data::CommonData,
+    common_data: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
+        let common_data = common_data::CommonData::default();
+        let common_data_arc = std::sync::Arc::new(std::sync::Mutex::new(common_data));
+
+        let mut next_view_nr = 0;
+        let mut gen_view = |ptype: PaneType| {
+            let view = Pane::new(ptype, next_view_nr, common_data_arc.clone());
+            next_view_nr += 1;
+            view
+        };
+
+        let mut tiles = egui_tiles::Tiles::default();
+
+        let mut tabs = vec![];
+        tabs.push({
+            let mut cells = Vec::new();
+            cells.push(tiles.insert_pane(gen_view(PaneType::None(0))));
+            cells.push(tiles.insert_pane(gen_view(PaneType::Table(
+                dataframe_table::DataFrameTable::default(),
+            ))));
+            cells.push(tiles.insert_pane(gen_view(PaneType::Plotter2D(
+                plotter_2d::Plotter2D::default(),
+            ))));
+            tiles.insert_grid_tile(cells)
+        });
+        tabs.push(tiles.insert_pane(gen_view(PaneType::Table(
+            dataframe_table::DataFrameTable::default(),
+        ))));
+
+        let root = tiles.insert_tab_tile(tabs);
+
+        let tree = egui_tiles::Tree::new(root, tiles);
+
         Self {
-            organized: false,
-            dataframe_table: dataframe_table::DataFrameTable::default(),
+            tree: tree,
+            behavior: Default::default(),
+            last_tree_debug: Default::default(),
             plotter_2d: plotter_2d::Plotter2D::default(),
             explorer: explorer::Explorer::default(),
-            common_data: common_data::CommonData::default(),
+            common_data: common_data_arc.clone(),
         }
     }
 }
@@ -75,33 +112,45 @@ impl TemplateApp {
 impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        let current_path = self.common_data.current_path.clone();
-        self.common_data.current_path = self.common_data.default_path.clone();
-        eframe::set_value(storage, eframe::APP_KEY, self);
-        self.common_data.current_path = current_path;
+        let cdata = self.common_data.try_lock();
+        if cdata.is_err() {
+            return;
+        }
+        let mut cdata = cdata.unwrap();
+        let current_path = cdata.current_path.clone();
+        cdata.current_path = cdata.default_path.clone();
+        //eframe::set_value(storage, eframe::APP_KEY, self);
+        cdata.current_path = current_path;
         log::info!("saved state");
     }
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        //        ctx.request_repaint();
-        ctx.request_repaint_after(std::time::Duration::from_millis((1000 / 60) as u64));
-        //
-        // Data update
-        //
-        self.common_data.update();
-
-        //
-        // View update
-        //
         let mut opening_modal_window = false;
-        for (_, (df_info, _)) in self.common_data.dataframes.iter_mut() {
-            if df_info.load_state == modal_window::LoadState::OpenModalWindow {
-                modal_window::ModalWindow::default().show(ctx, df_info);
-                opening_modal_window = true;
+        {
+            let cdata = self.common_data.try_lock();
+            if cdata.is_err() {
+                return;
+            }
+            let mut cdata = cdata.unwrap();
+
+            //        ctx.request_repaint();
+            ctx.request_repaint_after(std::time::Duration::from_millis((1000 / 60) as u64));
+            //
+            // Data update
+            //
+            cdata.update();
+
+            //
+            // View update
+            //
+            for (_, (df_info, _)) in cdata.dataframes.iter_mut() {
+                if df_info.load_state == modal_window::LoadState::OpenModalWindow {
+                    modal_window::ModalWindow::default().show(ctx, df_info);
+                    opening_modal_window = true;
+                }
             }
         }
-
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.set_enabled(!opening_modal_window);
 
@@ -118,17 +167,24 @@ impl eframe::App for TemplateApp {
 
                 egui::widgets::global_dark_light_mode_buttons(ui);
 
-                if ui.button("reset layout").clicked() {
-                    self.organized = false;
-                }
-
                 if ui.button("reset dataframes").clicked() {
-                    self.common_data.dataframes.clear();
+                    let cdata = self.common_data.try_lock();
+                    if cdata.is_err() {
+                        return;
+                    }
+                    let mut cdata = cdata.unwrap();
+                    cdata.dataframes.clear();
                 }
 
                 if ui.button("save").clicked() {
                     self.save(_frame.storage_mut().unwrap());
-                    self.common_data.save_df_list();
+                    let cdata = self.common_data.try_lock();
+                    if cdata.is_err() {
+                        return;
+                    }
+                    let mut cdata = cdata.unwrap();
+
+                    cdata.save_df_list();
                 }
             });
         });
@@ -137,24 +193,179 @@ impl eframe::App for TemplateApp {
 
             ui.heading("h_analyzer");
 
-            self.explorer.show(ui, &mut self.common_data);
+            self.explorer.show(ui, self.common_data.clone());
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.set_enabled(!opening_modal_window);
-
-            self.dataframe_table.show(ctx, &self.common_data);
-            self.plotter_2d.show(ctx, &self.common_data);
-
-            if !self.organized {
-                // organize windows
-                ui.memory_mut(|mem| mem.reset_areas());
-                self.organized = true;
-            }
+            self.tree.ui(&mut self.behavior, ui);
         });
 
         egui::TopBottomPanel::bottom("bottom").show(ctx, |ui| {
             ui.label("Progress");
         });
+    }
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+enum PaneType {
+    Plotter2D(plotter_2d::Plotter2D),
+    Table(dataframe_table::DataFrameTable),
+    None(i32),
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Pane {
+    pane_type: PaneType,
+    nr: usize,
+    common_data_arc: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
+}
+
+impl std::fmt::Debug for Pane {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("View").field("nr", &self.nr).finish()
+    }
+}
+
+impl Pane {
+    pub fn new(
+        pane_type: PaneType,
+        nr: usize,
+        common_data_arc: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
+    ) -> Self {
+        Self {
+            nr: nr,
+            pane_type: pane_type,
+            common_data_arc: common_data_arc,
+        }
+    }
+
+    pub fn ui(&mut self, ui: &mut egui::Ui) -> egui_tiles::UiResponse {
+        match &mut self.pane_type {
+            PaneType::Plotter2D(p2d) => {
+                p2d.show(ui, self.common_data_arc.clone());
+            }
+            PaneType::Table(ref mut tb) => {
+                tb.show(ui, self.common_data_arc.clone());
+            }
+            PaneType::None(_) => {
+                let color = egui::epaint::Hsva::new(0.103 * self.nr as f32, 0.5, 0.5, 1.0);
+                ui.painter().rect_filled(ui.max_rect(), 0.0, color);
+            }
+        }
+
+        let sense = ui
+            .allocate_rect(ui.max_rect(), egui::Sense::click_and_drag())
+            .on_hover_cursor(egui::CursorIcon::Grab);
+        if sense.clicked() {
+            log::info!("clicked {}", self.nr);
+        }
+        if sense.dragged {
+            egui_tiles::UiResponse::DragStarted
+        } else {
+            egui_tiles::UiResponse::None
+        }
+    }
+}
+
+struct TreeBehavior {
+    simplification_options: egui_tiles::SimplificationOptions,
+    tab_bar_height: f32,
+    gap_width: f32,
+    add_child_to: Option<egui_tiles::TileId>,
+}
+
+impl Default for TreeBehavior {
+    fn default() -> Self {
+        Self {
+            simplification_options: Default::default(),
+            tab_bar_height: 24.0,
+            gap_width: 4.0,
+            add_child_to: None,
+        }
+    }
+}
+
+impl TreeBehavior {
+    fn ui(&mut self, ui: &mut egui::Ui) {
+        let Self {
+            simplification_options,
+            tab_bar_height,
+            gap_width,
+            add_child_to: _,
+        } = self;
+
+        egui::Grid::new("behavior_ui")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("All panes must have tabs:");
+                ui.checkbox(&mut simplification_options.all_panes_must_have_tabs, "");
+                ui.end_row();
+
+                ui.label("Join nested containers:");
+                ui.checkbox(
+                    &mut simplification_options.join_nested_linear_containerss,
+                    "",
+                );
+                ui.end_row();
+
+                ui.label("Tab bar height:");
+                ui.add(
+                    egui::DragValue::new(tab_bar_height)
+                        .clamp_range(0.0..=100.0)
+                        .speed(1.0),
+                );
+                ui.end_row();
+
+                ui.label("Gap width:");
+                ui.add(
+                    egui::DragValue::new(gap_width)
+                        .clamp_range(0.0..=20.0)
+                        .speed(1.0),
+                );
+                ui.end_row();
+            });
+    }
+}
+
+impl egui_tiles::Behavior<Pane> for TreeBehavior {
+    fn pane_ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        _tile_id: egui_tiles::TileId,
+        view: &mut Pane,
+    ) -> egui_tiles::UiResponse {
+        view.ui(ui)
+    }
+
+    fn tab_title_for_pane(&mut self, view: &Pane) -> egui::WidgetText {
+        format!("View {}", view.nr).into()
+    }
+
+    fn top_bar_rtl_ui(
+        &mut self,
+        _tiles: &egui_tiles::Tiles<Pane>,
+        ui: &mut egui::Ui,
+        tile_id: egui_tiles::TileId,
+        _tabs: &egui_tiles::Tabs,
+    ) {
+        if ui.button("➕").clicked() {
+            self.add_child_to = Some(tile_id);
+        }
+    }
+
+    // ---
+    // Settings:
+
+    fn tab_bar_height(&self, _style: &egui::Style) -> f32 {
+        self.tab_bar_height
+    }
+
+    fn gap_width(&self, _style: &egui::Style) -> f32 {
+        self.gap_width
+    }
+
+    fn simplification_options(&self) -> egui_tiles::SimplificationOptions {
+        self.simplification_options
     }
 }

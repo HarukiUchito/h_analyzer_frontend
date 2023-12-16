@@ -198,10 +198,12 @@ impl CommonData {
         if let Some(d_path_promise) = &self.d_path_promise {
             if let Some(d_path) = d_path_promise.ready() {
                 log::info!("d_path_promise: {:?}", d_path);
-                let d_path = d_path.as_ref().unwrap().path.clone();
-                self.current_path = d_path.clone();
-                self.default_path = d_path.clone();
-                self.fs_list_promise = Some(self.backend.request_list(d_path.clone()));
+                if let Ok(d_path) = d_path.as_ref() {
+                    let d_path = d_path.path.clone();
+                    self.current_path = d_path.clone();
+                    self.default_path = d_path.clone();
+                    self.fs_list_promise = Some(self.backend.request_list(d_path.clone()));
+                }
 
                 self.d_path_promise = None;
             }
