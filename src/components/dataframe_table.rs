@@ -21,7 +21,7 @@ impl DataFrameTable {
         ui: &mut egui::Ui,
         common_data_arc: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
     ) -> Option<()> {
-        let common_data = common_data_arc.try_lock().ok()?;
+        let common_data = common_data_arc.lock().ok()?;
         let common_data = &(*common_data);
 
         let df = self.dataframe_select.select_df(0, ui, &common_data)?;

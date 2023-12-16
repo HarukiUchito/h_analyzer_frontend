@@ -130,7 +130,7 @@ impl Plotter2D {
         if common_data.is_err() {
             return;
         }
-        let mut common_data = common_data.unwrap();
+        let common_data = common_data.unwrap();
         egui::CollapsingHeader::new("Plot Settings")
             .default_open(true)
             .show(ui, |ui| {
@@ -187,11 +187,13 @@ impl Plotter2D {
                     });
                     let mut series_df = None;
                     ui.horizontal(|ui| {
-                        let common_data = &(*common_data);
+                        let common_data_ref = &(*common_data);
                         series_df = match info.source {
-                            SeriesSource::DataFrame => selector.select_df(idx + 1, ui, common_data),
+                            SeriesSource::DataFrame => {
+                                selector.select_df(idx + 1, ui, common_data_ref)
+                            }
                             SeriesSource::GRPCClient => {
-                                selector.select_backend_df(idx + 1, ui, common_data)
+                                selector.select_backend_df(idx + 1, ui, common_data_ref)
                             }
                         };
                         ui.label("Plot Type");

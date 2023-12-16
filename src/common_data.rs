@@ -89,7 +89,7 @@ impl CommonData {
         }
 
         let series_list = self.series_list_promise.as_ref()?.ready()?.as_ref().ok()?;
-        log::info!("{:?}", series_list);
+        //log::info!("{:?}", series_list);
         for metadata in series_list.list.iter() {
             let df_id = unwrap_or_continue!(metadata.clone().id);
             let df_id_str = df_id.id.clone();
@@ -214,6 +214,7 @@ impl CommonData {
                 if let Some(result) = result.ready() {
                     if let Ok(result) = result {
                         if let Some(entry) = self.dataframes.get_mut(&idx.to_string()) {
+                            log::info!("df stored {:?}", result.shape());
                             entry.1 = Some(result.clone());
                         }
                         return result.clone();

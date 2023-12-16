@@ -30,7 +30,7 @@ impl Explorer {
         ui: &mut egui::Ui,
         common_data_arc: std::sync::Arc<std::sync::Mutex<CommonData>>,
     ) {
-        let common_data = common_data_arc.try_lock();
+        let common_data = common_data_arc.lock();
         if common_data.is_err() {
             return;
         }
@@ -106,10 +106,13 @@ impl Explorer {
                 });
             }
             ExplorerTab::DATAFRAME => {
-                for (_, (df_info, _)) in common_data.dataframes.iter() {
+                for (_, (df_info, df_opt)) in common_data.dataframes.iter() {
                     let mut checkd = false;
                     let name = get_filename(&df_info.filepath.as_str());
                     ui.checkbox(&mut checkd, name.clone());
+                    if let Some(df) = df_opt {
+                        ui.label(format!("shape {:?}", df.shape()));
+                    }
                 }
             }
         }

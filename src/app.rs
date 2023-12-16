@@ -2,7 +2,9 @@
 //use plotters::prelude::*;
 use crate::common_data;
 use crate::components::{dataframe_table, explorer, modal_window, plotter_2d};
+use eframe::egui::accesskit::Tree;
 use eframe::egui::{self, FontData};
+use egui_tiles::Behavior;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -19,8 +21,6 @@ pub struct TemplateApp {
     #[serde(skip)]
     explorer: explorer::Explorer,
 
-    plotter_2d: plotter_2d::Plotter2D,
-
     #[serde(skip)]
     common_data: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
 }
@@ -32,7 +32,7 @@ impl Default for TemplateApp {
 
         let mut next_view_nr = 0;
         let mut gen_view = |ptype: PaneType| {
-            let view = Pane::new(ptype, next_view_nr, common_data_arc.clone());
+            let view = Pane::new(ptype, next_view_nr);
             next_view_nr += 1;
             view
         };
@@ -61,9 +61,8 @@ impl Default for TemplateApp {
 
         Self {
             tree: tree,
-            behavior: Default::default(),
+            behavior: TreeBehavior::new(common_data_arc.clone()),
             last_tree_debug: Default::default(),
-            plotter_2d: plotter_2d::Plotter2D::default(),
             explorer: explorer::Explorer::default(),
             common_data: common_data_arc.clone(),
         }
@@ -102,7 +101,13 @@ impl TemplateApp {
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
         if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+            let mut loaded: TemplateApp =
+                eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+            let common_data = common_data::CommonData::default();
+            let common_data_arc = std::sync::Arc::new(std::sync::Mutex::new(common_data));
+            loaded.behavior = TreeBehavior::new(common_data_arc.clone());
+            loaded.common_data = common_data_arc.clone();
+            return loaded;
         }
 
         Default::default()
@@ -112,23 +117,32 @@ impl TemplateApp {
 impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        let cdata = self.common_data.try_lock();
-        if cdata.is_err() {
-            return;
+        let current_path = {
+            let cdata = self.common_data.lock();
+            if cdata.is_err() {
+                return;
+            }
+            let mut cdata = cdata.unwrap();
+            let current_path = cdata.current_path.clone();
+            cdata.current_path = cdata.default_path.clone();
+            current_path.clone()
+        };
+        eframe::set_value(storage, eframe::APP_KEY, self);
+        {
+            let cdata = self.common_data.lock();
+            if cdata.is_err() {
+                return;
+            }
+            let mut cdata = cdata.unwrap();
+            cdata.current_path = current_path;
         }
-        let mut cdata = cdata.unwrap();
-        let current_path = cdata.current_path.clone();
-        cdata.current_path = cdata.default_path.clone();
-        //eframe::set_value(storage, eframe::APP_KEY, self);
-        cdata.current_path = current_path;
-        log::info!("saved state");
     }
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let mut opening_modal_window = false;
         {
-            let cdata = self.common_data.try_lock();
+            let cdata = self.common_data.lock();
             if cdata.is_err() {
                 return;
             }
@@ -168,7 +182,7 @@ impl eframe::App for TemplateApp {
                 egui::widgets::global_dark_light_mode_buttons(ui);
 
                 if ui.button("reset dataframes").clicked() {
-                    let cdata = self.common_data.try_lock();
+                    let cdata = self.common_data.lock();
                     if cdata.is_err() {
                         return;
                     }
@@ -177,8 +191,11 @@ impl eframe::App for TemplateApp {
                 }
 
                 if ui.button("save").clicked() {
-                    self.save(_frame.storage_mut().unwrap());
-                    let cdata = self.common_data.try_lock();
+                    if let Some(storage) = _frame.storage_mut() {
+                        self.save(storage);
+                        log::info!("saved");
+                    }
+                    let cdata = self.common_data.lock();
                     if cdata.is_err() {
                         return;
                     }
@@ -218,7 +235,6 @@ enum PaneType {
 struct Pane {
     pane_type: PaneType,
     nr: usize,
-    common_data_arc: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
 }
 
 impl std::fmt::Debug for Pane {
@@ -228,39 +244,52 @@ impl std::fmt::Debug for Pane {
 }
 
 impl Pane {
-    pub fn new(
-        pane_type: PaneType,
-        nr: usize,
-        common_data_arc: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
-    ) -> Self {
+    pub fn new(pane_type: PaneType, nr: usize) -> Self {
         Self {
             nr: nr,
             pane_type: pane_type,
-            common_data_arc: common_data_arc,
         }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui) -> egui_tiles::UiResponse {
-        match &mut self.pane_type {
-            PaneType::Plotter2D(p2d) => {
-                p2d.show(ui, self.common_data_arc.clone());
-            }
-            PaneType::Table(ref mut tb) => {
-                tb.show(ui, self.common_data_arc.clone());
-            }
-            PaneType::None(_) => {
-                let color = egui::epaint::Hsva::new(0.103 * self.nr as f32, 0.5, 0.5, 1.0);
+    pub fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        common_data_arc: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
+    ) -> egui_tiles::UiResponse {
+        let mut sense_drag = false;
+        ui.vertical(|ui| {
+            let (rect, resp) = ui.allocate_at_least(
+                egui::Vec2::new(ui.available_width(), 20.0),
+                egui::Sense::click_and_drag(),
+            );
+            ui.allocate_ui_at_rect(rect, |ui| {
+                let color = egui::epaint::Hsva::new(0.503 * self.nr as f32, 0.7, 0.5, 1.0);
                 ui.painter().rect_filled(ui.max_rect(), 0.0, color);
+                ui.label("test");
+            });
+            sense_drag = resp.dragged();
+
+            match &mut self.pane_type {
+                PaneType::Plotter2D(p2d) => {
+                    p2d.show(ui, common_data_arc.clone());
+                }
+                PaneType::Table(ref mut tb) => {
+                    tb.show(ui, common_data_arc.clone());
+                }
+                PaneType::None(_) => {
+                    let color = egui::epaint::Hsva::new(0.103 * self.nr as f32, 0.5, 0.5, 1.0);
+                    ui.painter().rect_filled(ui.max_rect(), 0.0, color);
+                }
             }
-        }
+        });
 
         let sense = ui
-            .allocate_rect(ui.max_rect(), egui::Sense::click_and_drag())
+            .allocate_rect(egui::Rect::NOTHING, egui::Sense::click_and_drag())
             .on_hover_cursor(egui::CursorIcon::Grab);
         if sense.clicked() {
             log::info!("clicked {}", self.nr);
         }
-        if sense.dragged {
+        if sense_drag {
             egui_tiles::UiResponse::DragStarted
         } else {
             egui_tiles::UiResponse::None
@@ -273,15 +302,17 @@ struct TreeBehavior {
     tab_bar_height: f32,
     gap_width: f32,
     add_child_to: Option<egui_tiles::TileId>,
+    common_data_arc: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
 }
 
-impl Default for TreeBehavior {
-    fn default() -> Self {
+impl TreeBehavior {
+    fn new(common_data_arc: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>) -> Self {
         Self {
             simplification_options: Default::default(),
             tab_bar_height: 24.0,
             gap_width: 4.0,
             add_child_to: None,
+            common_data_arc: common_data_arc,
         }
     }
 }
@@ -293,6 +324,7 @@ impl TreeBehavior {
             tab_bar_height,
             gap_width,
             add_child_to: _,
+            common_data_arc,
         } = self;
 
         egui::Grid::new("behavior_ui")
@@ -335,7 +367,7 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior {
         _tile_id: egui_tiles::TileId,
         view: &mut Pane,
     ) -> egui_tiles::UiResponse {
-        view.ui(ui)
+        view.ui(ui, self.common_data_arc.clone())
     }
 
     fn tab_title_for_pane(&mut self, view: &Pane) -> egui::WidgetText {
