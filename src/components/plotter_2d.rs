@@ -126,7 +126,7 @@ impl Plotter2D {
         ui: &mut egui::Ui,
         common_data_arc: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
     ) {
-        let common_data = common_data_arc.try_lock();
+        let common_data = common_data_arc.lock();
         if common_data.is_err() {
             return;
         }
@@ -190,10 +190,10 @@ impl Plotter2D {
                         let common_data_ref = &(*common_data);
                         series_df = match info.source {
                             SeriesSource::DataFrame => {
-                                selector.select_df(idx + 1, ui, common_data_ref)
+                                selector.select_df(idx + 1, ui, &common_data_ref)
                             }
                             SeriesSource::GRPCClient => {
-                                selector.select_backend_df(idx + 1, ui, common_data_ref)
+                                selector.select_backend_df(idx + 1, ui, &common_data_ref)
                             }
                         };
                         ui.label("Plot Type");

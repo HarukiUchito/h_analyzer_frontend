@@ -2,9 +2,7 @@
 //use plotters::prelude::*;
 use crate::common_data;
 use crate::components::{dataframe_table, explorer, modal_window, plotter_2d};
-use eframe::egui::accesskit::Tree;
 use eframe::egui::{self, FontData};
-use egui_tiles::Behavior;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -45,6 +43,9 @@ impl Default for TemplateApp {
             cells.push(tiles.insert_pane(gen_view(PaneType::None(0))));
             cells.push(tiles.insert_pane(gen_view(PaneType::Table(
                 dataframe_table::DataFrameTable::default(),
+            ))));
+            cells.push(tiles.insert_pane(gen_view(PaneType::Plotter2D(
+                plotter_2d::Plotter2D::default(),
             ))));
             cells.push(tiles.insert_pane(gen_view(PaneType::Plotter2D(
                 plotter_2d::Plotter2D::default(),
