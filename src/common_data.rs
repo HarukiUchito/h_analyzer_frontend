@@ -215,7 +215,9 @@ impl CommonData {
                     if let Ok(result) = result {
                         if let Some(entry) = self.dataframes.get_mut(&idx.to_string()) {
                             log::info!("df stored {:?}", result.shape());
+                            log::info!("{:?}", result);
                             entry.1 = Some(result.clone());
+                            log::info!("{:?}", entry.1.clone().unwrap_or_default());
                         }
                         return result.clone();
                     }

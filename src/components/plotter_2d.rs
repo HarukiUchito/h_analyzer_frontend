@@ -289,6 +289,9 @@ impl Plotter2D {
                 let coly = unwrap_or_continue!(&s_info.y_column);
                 let xs = extract_series(&local_df, colx.as_str());
                 let ys = extract_series(&local_df, coly.as_str());
+                if xs.len() == 0 || ys.len() == 0 {
+                    continue;
+                }
                 let xys: Vec<[f64; 2]> = (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
                 //plot_ui.points(points)
                 if s_info.track_this {

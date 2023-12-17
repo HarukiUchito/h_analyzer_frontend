@@ -264,7 +264,7 @@ impl Pane {
                 egui::Sense::click_and_drag(),
             );
             ui.allocate_ui_at_rect(rect, |ui| {
-                let color = egui::epaint::Hsva::new(0.503 * self.nr as f32, 0.7, 0.5, 1.0);
+                let color = egui::epaint::Color32::DARK_GRAY;
                 ui.painter().rect_filled(ui.max_rect(), 0.0, color);
                 ui.label("test");
             });

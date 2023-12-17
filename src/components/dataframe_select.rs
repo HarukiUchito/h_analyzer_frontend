@@ -80,7 +80,13 @@ impl DataFrameSelect {
                 if common_data.dataframes.len() == 0 {
                     ui.label("Load DataFrame");
                 } else {
-                    let (df_info, _) = common_data.dataframes.get(&df_key)?;
+                    let df_opt = common_data.dataframes.get(&df_key);
+                    let (df_info, _) = if let Some(df_pair) = df_opt {
+                        df_pair
+                    } else {
+                        let df_key = "0".to_string();
+                        common_data.dataframes.get(&df_key).unwrap()
+                    };
                     let fname = get_filename(df_info.filepath.as_str());
                     ui.label("Select DataFrame");
                     egui::ComboBox::from_label("")
