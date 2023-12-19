@@ -1,4 +1,4 @@
-use crate::common_data::{self, CommonData};
+use crate::common_data::CommonData;
 use crate::components::modal_window;
 use eframe::egui;
 

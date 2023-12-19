@@ -22,8 +22,8 @@ impl DataFrameSelect {
         &mut self,
         idx: usize,
         ui: &mut egui::Ui,
-        common_data: &'a common_data::CommonData,
-    ) -> Option<&'a DataFrame> {
+        common_data: &'a mut common_data::CommonData,
+    ) -> Option<&'a mut DataFrame> {
         if common_data.realtime_dataframes.len() == 0 {
             ui.label("Load DataFrame");
             None
@@ -42,8 +42,6 @@ impl DataFrameSelect {
                 self.dataframe_key = Some(f_key.clone());
                 f_key
             };
-
-            let ret_df = common_data.realtime_dataframes.get(&df_key);
 
             ui.push_id(format!("df_backend_select_{}", idx), |ui| {
                 ui.horizontal(|ui| {
@@ -64,7 +62,8 @@ impl DataFrameSelect {
                 });
             });
 
-            ret_df
+            let ret_df = common_data.realtime_dataframes.get_mut(&df_key)?;
+            Some(ret_df)
         }
     }
 
@@ -72,8 +71,8 @@ impl DataFrameSelect {
         &mut self,
         idx: usize,
         ui: &mut egui::Ui,
-        common_data: &'a common_data::CommonData,
-    ) -> Option<&'a DataFrame> {
+        common_data: &'a mut common_data::CommonData,
+    ) -> Option<&'a mut DataFrame> {
         let df_key = self.dataframe_key.clone().unwrap_or("0".to_string());
         ui.push_id(format!("df_select_{}", idx), |ui| {
             ui.horizontal(|ui| -> Option<()> {
@@ -107,6 +106,6 @@ impl DataFrameSelect {
                 None
             });
         });
-        Some(common_data.dataframes.get(&df_key)?.1.as_ref()?)
+        Some(common_data.dataframes.get_mut(&df_key)?.1.as_mut()?)
     }
 }

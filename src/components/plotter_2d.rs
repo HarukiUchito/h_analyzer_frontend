@@ -80,7 +80,7 @@ impl Plotter2D {
         idx: usize,
         info: &mut SeriesInfo,
         ui: &mut egui::Ui,
-        df: Option<&DataFrame>,
+        df: Option<&mut DataFrame>,
     ) -> Option<()> {
         let df = df?;
         ui.label("x axis: ");
@@ -134,7 +134,7 @@ impl Plotter2D {
         if common_data.is_err() {
             return;
         }
-        let common_data = common_data.unwrap();
+        let common_data = &mut common_data.unwrap();
         egui::CollapsingHeader::new("Plot Settings")
             .default_open(true)
             .show(ui, |ui| {
@@ -205,13 +205,10 @@ impl Plotter2D {
                     });
                     let mut series_df = None;
                     ui.horizontal(|ui| {
-                        let common_data_ref = &(*common_data);
                         series_df = match info.source {
-                            SeriesSource::DataFrame => {
-                                selector.select_df(idx + 1, ui, &common_data_ref)
-                            }
+                            SeriesSource::DataFrame => selector.select_df(idx + 1, ui, common_data),
                             SeriesSource::GRPCClient => {
-                                selector.select_backend_df(idx + 1, ui, &common_data_ref)
+                                selector.select_backend_df(idx + 1, ui, common_data)
                             }
                         };
                         ui.label("Plot Type");
