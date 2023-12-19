@@ -56,6 +56,8 @@ impl Default for SeriesInfo {
 pub struct Plotter2D {
     title: String,
     equal_aspect: bool,
+    apply_x_limit: bool,
+    limit_x_range: (f64, f64),
     series_infos: Vec<SeriesInfo>,
     series_df_selectors: Vec<dataframe_select::DataFrameSelect>,
 }
@@ -65,6 +67,8 @@ impl Default for Plotter2D {
         Self {
             title: "".to_string(),
             equal_aspect: true,
+            apply_x_limit: false,
+            limit_x_range: (0.0, 0.0),
             series_infos: Vec::new(),
             series_df_selectors: Vec::new(),
         }
@@ -139,6 +143,20 @@ impl Plotter2D {
                         egui::TextEdit::singleline(&mut self.title).hint_text("title of the plot"),
                     );
                     ui.checkbox(&mut self.equal_aspect, "Equal Aspect Ratio");
+                });
+
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.apply_x_limit, "Limit x range");
+                    ui.add(
+                        egui::DragValue::new(&mut self.limit_x_range.0)
+                            .speed(0.1)
+                            .prefix(" min: "),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut self.limit_x_range.1)
+                            .speed(0.1)
+                            .prefix(" max: "),
+                    );
                 });
 
                 let mut del_idx = None;
@@ -284,7 +302,18 @@ impl Plotter2D {
                         .get(&df_id)
                         .map(|df_opt| df_opt.clone()),
                 };
-                let local_df = unwrap_or_continue!(local_df);
+                let mut local_df = unwrap_or_continue!(local_df);
+
+                if self.apply_x_limit {
+                    log::info!("{:?}", self.limit_x_range);
+                    let rt_col = local_df.column("Relative Time[s]").unwrap();
+                    let mask = rt_col.gt(self.limit_x_range.0).unwrap();
+                    local_df = local_df.filter(&mask).unwrap();
+                    let rt_col = local_df.column("Relative Time[s]").unwrap();
+                    let mask = rt_col.lt(self.limit_x_range.1).unwrap();
+                    local_df = local_df.filter(&mask).unwrap();
+                }
+
                 let colx = unwrap_or_continue!(&s_info.x_column);
                 let coly = unwrap_or_continue!(&s_info.y_column);
                 let xs = extract_series(&local_df, colx.as_str());
@@ -305,10 +334,13 @@ impl Plotter2D {
                 }
                 match s_info.plot_type {
                     PlotType::Point => {
+                        let line_obj = egui_plot::Line::new(xys.clone());
+                        plot_ui.line(line_obj);
                         plot_ui.points(
                             egui_plot::Points::new(xys)
-                                .radius(10.0)
+                                .radius(5.0)
                                 .filled(false)
+                                .shape(egui_plot::MarkerShape::Diamond)
                                 .name(&s_info.title),
                         );
                     }
@@ -328,7 +360,7 @@ impl Plotter2D {
 
                         plot_ui.points(
                             egui_plot::Points::new(xys)
-                                .radius(10.0)
+                                .radius(1.0)
                                 .filled(false)
                                 .name(&s_info.title),
                         );
