@@ -1,3 +1,5 @@
+use core::panic;
+
 use crate::{common_data, components::dataframe_select};
 use eframe::egui;
 use egui_extras::{Column, TableBuilder};
@@ -47,12 +49,55 @@ impl ENUTransform {
             ui.label(", longitude: ");
             self.ui_lon.show(df, ui, format!("ENU_trfm_lon"));
             if ui.button("execute").clicked() {
-                let lat_col = df
+                let df_clone = df.clone();
+                let lat_col = df_clone
                     .column(self.ui_lat.column.as_ref().unwrap().as_str())
+                    .unwrap()
+                    .f64()
+                    .unwrap();
+                let lon_col = df_clone
+                    .column(self.ui_lon.column.as_ref().unwrap().as_str())
+                    .unwrap()
+                    .f64()
+                    .unwrap();
+                let hei_col = df_clone
+                    .column(" Ellipsoid Height (m)")
+                    .unwrap()
+                    .f64()
                     .unwrap();
 
-                df.with_column(Series::new("Plus1", lat_col.f64().unwrap() + 1.0))
-                    .unwrap();
+                let res: Vec<(f64, f64, f64)> = lat_col
+                    .into_iter()
+                    .zip(lon_col.into_iter())
+                    .zip(hei_col.into_iter())
+                    .map(|(latlon, hei)| match (latlon, hei) {
+                        ((Some(lat), Some(lon)), Some(hei)) => {
+                            let (pe, pn, pu) = map_3d::geodetic2enu(
+                                lat.to_radians(),
+                                lon.to_radians(),
+                                hei,
+                                lat_col.get(0).unwrap().to_radians(),
+                                lon_col.get(0).unwrap().to_radians(),
+                                hei_col.get(0).unwrap(),
+                                map_3d::Ellipsoid::WGS84,
+                            );
+                            (pe, pn, pu)
+                        }
+                        _ => panic!("unexpected"),
+                    })
+                    .collect();
+                let mut e_vec = Vec::new();
+                let mut n_vec = Vec::new();
+                let mut u_vec = Vec::new();
+                for (e, n, u) in res.iter() {
+                    e_vec.push(*e);
+                    n_vec.push(*n);
+                    u_vec.push(*u);
+                }
+
+                df.with_column(Series::new("ENU_E[m]", e_vec)).unwrap();
+                df.with_column(Series::new("ENU_N[m]", n_vec)).unwrap();
+                df.with_column(Series::new("ENU_U[m]", u_vec)).unwrap();
             }
         });
     }
