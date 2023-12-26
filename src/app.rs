@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
 use crate::common_data;
@@ -44,9 +46,9 @@ impl Default for TemplateApp {
             cells.push(tiles.insert_pane(gen_view(PaneType::Table(
                 dataframe_table::DataFrameTable::default(),
             ))));
-            cells.push(tiles.insert_pane(gen_view(PaneType::Plotter2D(
-                plotter_2d::Plotter2D::default(),
-            ))));
+            cells.push(
+                tiles.insert_pane(gen_view(PaneType::PerformancePlot(PerformancePlot::new()))),
+            );
             cells.push(tiles.insert_pane(gen_view(PaneType::Plotter2D(
                 plotter_2d::Plotter2D::default(),
             ))));
@@ -54,6 +56,9 @@ impl Default for TemplateApp {
         });
         tabs.push(tiles.insert_pane(gen_view(PaneType::Table(
             dataframe_table::DataFrameTable::default(),
+        ))));
+        tabs.push(tiles.insert_pane(gen_view(PaneType::Plotter2D(
+            plotter_2d::Plotter2D::default(),
         ))));
 
         let root = tiles.insert_tab_tile(tabs);
@@ -229,7 +234,115 @@ impl eframe::App for TemplateApp {
 enum PaneType {
     Plotter2D(plotter_2d::Plotter2D),
     Table(dataframe_table::DataFrameTable),
+    PerformancePlot(PerformancePlot),
     None(i32),
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct PerformancePlot {
+    history_map: std::collections::HashMap<String, std::collections::VecDeque<f64>>,
+}
+
+impl PerformancePlot {
+    pub fn new() -> Self {
+        let mut mp = std::collections::HashMap::new();
+        mp.insert("test1".to_string(), std::collections::VecDeque::from([0.0]));
+        mp.insert("test2".to_string(), std::collections::VecDeque::new());
+        mp.insert("test3".to_string(), std::collections::VecDeque::new());
+        Self { history_map: mp }
+    }
+
+    pub fn update(&mut self) {
+        log::info!("pplot update {}", self.history_map.len());
+        for (k, v) in self.history_map.iter_mut() {
+            log::info!("key {}", k);
+            log::info!("vs {:?}", v);
+            v.clear();
+            for i in 0..10 {
+                v.push_back(i as f64);
+            }
+        }
+    }
+
+    pub fn show(&mut self, ui: &mut egui::Ui) {
+        self.update();
+
+        ui.label("pplot");
+        let mut chart1 = egui_plot::BarChart::new(vec![
+            egui_plot::Bar::new(0.5, 1.0).name("Day 1"),
+            egui_plot::Bar::new(1.5, 3.0).name("Day 2"),
+            egui_plot::Bar::new(2.5, 1.0).name("Day 3"),
+            egui_plot::Bar::new(3.5, 2.0).name("Day 4"),
+            egui_plot::Bar::new(4.5, 4.0).name("Day 5"),
+        ])
+        .width(0.7)
+        .name("Set 1");
+
+        let mut chart2 = egui_plot::BarChart::new(vec![
+            egui_plot::Bar::new(0.5, 1.0),
+            egui_plot::Bar::new(1.5, 1.5),
+            egui_plot::Bar::new(2.5, 0.1),
+            egui_plot::Bar::new(3.5, 0.7),
+            egui_plot::Bar::new(4.5, 0.8),
+        ])
+        .width(0.7)
+        .name("Set 2")
+        .stack_on(&[&chart1]);
+
+        let mut chart3 = egui_plot::BarChart::new(vec![
+            egui_plot::Bar::new(0.5, -0.5),
+            egui_plot::Bar::new(1.5, 1.0),
+            egui_plot::Bar::new(2.5, 0.5),
+            egui_plot::Bar::new(3.5, -1.0),
+            egui_plot::Bar::new(4.5, 0.3),
+        ])
+        .width(0.7)
+        .name("Set 3")
+        .stack_on(&[&chart1, &chart2]);
+
+        let mut chart4 = egui_plot::BarChart::new(vec![
+            egui_plot::Bar::new(0.5, 0.5),
+            egui_plot::Bar::new(1.5, 1.0),
+            egui_plot::Bar::new(2.5, 0.5),
+            egui_plot::Bar::new(3.5, -0.5),
+            egui_plot::Bar::new(4.5, -0.5),
+        ])
+        .width(0.7)
+        .name("Set 4")
+        .stack_on(&[&chart1, &chart2, &chart3]);
+
+        egui_plot::Plot::new("Stacked Bar Chart Demo")
+            .legend(egui_plot::Legend::default())
+            .data_aspect(1.0)
+            .allow_drag(true)
+            .auto_bounds_x()
+            .auto_bounds_y()
+            .show(ui, |plot_ui| {
+                let mut bar_charts = Vec::new();
+                for (k, v) in self.history_map.iter_mut() {
+                    let bars: Vec<egui_plot::Bar> = v
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &v)| -> egui_plot::Bar { egui_plot::Bar::new(i as f64, v) })
+                        .collect();
+                    let bar_chart = egui_plot::BarChart::new(bars).width(0.8).name(k).stack_on(
+                        bar_charts
+                            .iter()
+                            .collect::<Vec<&egui_plot::BarChart>>()
+                            .as_slice(),
+                    );
+                    bar_charts.push(bar_chart);
+                }
+                for bar_chart in bar_charts.drain(..) {
+                    plot_ui.bar_chart(bar_chart);
+                }
+                //plot_ui.bar_chart(chart1);
+                //plot_ui.bar_chart(chart2);
+                //plot_ui.bar_chart(chart3);
+                //plot_ui.bar_chart(chart4);
+            })
+            .response;
+    }
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -276,6 +389,9 @@ impl Pane {
                 }
                 PaneType::Table(ref mut tb) => {
                     tb.show(ui, common_data_arc.clone());
+                }
+                PaneType::PerformancePlot(pp) => {
+                    pp.show(ui);
                 }
                 PaneType::None(_) => {
                     let color = egui::epaint::Hsva::new(0.103 * self.nr as f32, 0.5, 0.5, 1.0);
