@@ -26,6 +26,9 @@ pub struct CommonData {
     #[serde(skip)]
     pub series_list_promise:
         Option<Promise<Result<grpc_data_transfer::SeriesMetadataList, tonic::Status>>>,
+    #[serde(skip)]
+    series_list_req_time: web_time::Instant,
+    pub sl_time_history: std::collections::VecDeque<f64>,
 
     #[serde(skip)]
     pub init_df_list_promise:
@@ -60,6 +63,8 @@ impl Default for CommonData {
             realtime_dataframes: HashMap::new(),
             realtime_promises: HashMap::new(),
             series_list_promise: None,
+            series_list_req_time: web_time::Instant::now(),
+            sl_time_history: std::collections::VecDeque::new(),
 
             init_df_list_promise: Some(init_df_list_promise),
             df_to_be_loaded_queue: VecDeque::new(),
@@ -86,9 +91,16 @@ impl CommonData {
     fn update_realtime_dataframe(&mut self) -> Option<()> {
         if self.series_list_promise.is_none() {
             self.series_list_promise = Some(self.backend.get_series_list());
+            self.series_list_req_time = web_time::Instant::now();
         }
 
         let series_list = self.series_list_promise.as_ref()?.ready()?.as_ref().ok()?;
+        let et = self.series_list_req_time.elapsed().as_nanos() as f64;
+        self.sl_time_history.push_back(et * 1e-9);
+        if self.sl_time_history.len() > 10 {
+            self.sl_time_history.pop_front();
+        }
+
         //log::info!("{:?}", series_list);
         for metadata in series_list.list.iter() {
             let df_id = unwrap_or_continue!(metadata.clone().id);

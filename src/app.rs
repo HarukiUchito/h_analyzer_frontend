@@ -252,73 +252,37 @@ impl PerformancePlot {
         Self { history_map: mp }
     }
 
-    pub fn update(&mut self) {
-        log::info!("pplot update {}", self.history_map.len());
-        for (k, v) in self.history_map.iter_mut() {
-            log::info!("key {}", k);
-            log::info!("vs {:?}", v);
-            v.clear();
-            for i in 0..10 {
-                v.push_back(i as f64);
-            }
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        common_data_arc: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
+    ) -> Option<()> {
+        let common_data = common_data_arc.lock();
+        if common_data.is_err() {
+            return None;
         }
-    }
-
-    pub fn show(&mut self, ui: &mut egui::Ui) {
-        self.update();
-
-        ui.label("pplot");
-        let mut chart1 = egui_plot::BarChart::new(vec![
-            egui_plot::Bar::new(0.5, 1.0).name("Day 1"),
-            egui_plot::Bar::new(1.5, 3.0).name("Day 2"),
-            egui_plot::Bar::new(2.5, 1.0).name("Day 3"),
-            egui_plot::Bar::new(3.5, 2.0).name("Day 4"),
-            egui_plot::Bar::new(4.5, 4.0).name("Day 5"),
-        ])
-        .width(0.7)
-        .name("Set 1");
-
-        let mut chart2 = egui_plot::BarChart::new(vec![
-            egui_plot::Bar::new(0.5, 1.0),
-            egui_plot::Bar::new(1.5, 1.5),
-            egui_plot::Bar::new(2.5, 0.1),
-            egui_plot::Bar::new(3.5, 0.7),
-            egui_plot::Bar::new(4.5, 0.8),
-        ])
-        .width(0.7)
-        .name("Set 2")
-        .stack_on(&[&chart1]);
-
-        let mut chart3 = egui_plot::BarChart::new(vec![
-            egui_plot::Bar::new(0.5, -0.5),
-            egui_plot::Bar::new(1.5, 1.0),
-            egui_plot::Bar::new(2.5, 0.5),
-            egui_plot::Bar::new(3.5, -1.0),
-            egui_plot::Bar::new(4.5, 0.3),
-        ])
-        .width(0.7)
-        .name("Set 3")
-        .stack_on(&[&chart1, &chart2]);
-
-        let mut chart4 = egui_plot::BarChart::new(vec![
-            egui_plot::Bar::new(0.5, 0.5),
-            egui_plot::Bar::new(1.5, 1.0),
-            egui_plot::Bar::new(2.5, 0.5),
-            egui_plot::Bar::new(3.5, -0.5),
-            egui_plot::Bar::new(4.5, -0.5),
-        ])
-        .width(0.7)
-        .name("Set 4")
-        .stack_on(&[&chart1, &chart2, &chart3]);
+        let common_data = &mut common_data.unwrap();
 
         egui_plot::Plot::new("Stacked Bar Chart Demo")
             .legend(egui_plot::Legend::default())
-            .data_aspect(1.0)
-            .allow_drag(true)
             .auto_bounds_x()
             .auto_bounds_y()
             .show(ui, |plot_ui| {
-                let mut bar_charts = Vec::new();
+                //plot_ui.bar_chart(vec![egui_plot::BarChart::new()]);
+                plot_ui.bar_chart(
+                    egui_plot::BarChart::new(
+                        common_data
+                            .sl_time_history
+                            .iter()
+                            .enumerate()
+                            .map(|(i, &v)| -> egui_plot::Bar {
+                                egui_plot::Bar::new(i as f64, v * 1e3)
+                            })
+                            .collect(),
+                    )
+                    .name("series list"),
+                );
+                /*
                 for (k, v) in self.history_map.iter_mut() {
                     let bars: Vec<egui_plot::Bar> = v
                         .iter()
@@ -336,12 +300,10 @@ impl PerformancePlot {
                 for bar_chart in bar_charts.drain(..) {
                     plot_ui.bar_chart(bar_chart);
                 }
-                //plot_ui.bar_chart(chart1);
-                //plot_ui.bar_chart(chart2);
-                //plot_ui.bar_chart(chart3);
-                //plot_ui.bar_chart(chart4);
+                */
             })
             .response;
+        Some(())
     }
 }
 
@@ -391,7 +353,7 @@ impl Pane {
                     tb.show(ui, common_data_arc.clone());
                 }
                 PaneType::PerformancePlot(pp) => {
-                    pp.show(ui);
+                    pp.show(ui, common_data_arc.clone());
                 }
                 PaneType::None(_) => {
                     let color = egui::epaint::Hsva::new(0.103 * self.nr as f32, 0.5, 0.5, 1.0);
