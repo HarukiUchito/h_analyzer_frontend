@@ -2,8 +2,8 @@ use crate::components::modal_window::{self};
 use polars::prelude::*;
 use poll_promise::Promise;
 
-pub use h_analyzer_grpc::grpc_data_transfer;
-pub use h_analyzer_grpc::grpc_fs;
+pub use h_analyzer_data::grpc_data_transfer;
+pub use h_analyzer_data::grpc_fs;
 
 pub struct BackendTalk {
     server_address: String,
@@ -12,6 +12,7 @@ pub struct BackendTalk {
 pub enum ResponseType {
     Point2D(grpc_data_transfer::PollPoint2DSeriesResponse),
     Pose2D(grpc_data_transfer::PollPose2DSeriesResponse),
+    PointCloud2D(grpc_data_transfer::PollPointCloud2DSeriesResponse),
 }
 
 use tonic_web_wasm_client::Client;
@@ -64,6 +65,24 @@ impl BackendTalk {
                 );
             let resp = query_client.poll_pose2_d_queue(id).await?.into_inner();
             Ok(ResponseType::Pose2D(resp))
+        })
+    }
+
+    pub fn poll_point_cloud_2d_queue(
+        &self,
+        id: grpc_data_transfer::SeriesId,
+    ) -> Promise<Result<ResponseType, tonic::Status>> {
+        let addr = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_data_transfer::data_transfer2_d_client::DataTransfer2DClient::new(
+                    Client::new(addr),
+                );
+            let resp = query_client
+                .poll_point_cloud2_d_queue(id)
+                .await?
+                .into_inner();
+            Ok(ResponseType::PointCloud2D(resp))
         })
     }
 
@@ -161,6 +180,33 @@ impl BackendTalk {
             }
             let df = bincode::deserialize_from(cvec.clone().as_slice()).unwrap();
             Ok(df)
+        })
+    }
+
+    pub fn get_world_frame(
+        &self,
+        unix_timestamp: f64,
+    ) -> Promise<Result<h_analyzer_data::WorldFrame, tonic::Status>> {
+        let base_url = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_data_transfer::data_transfer2_d_client::DataTransfer2DClient::new(
+                    Client::new(base_url),
+                );
+
+            let req = grpc_data_transfer::UnixTimeStamp {
+                value: unix_timestamp,
+            };
+            let mut stream = query_client.get_world_frame(req).await?.into_inner();
+
+            let mut cvec = Vec::new();
+            while let Some(cdata) = stream.message().await? {
+                for v in cdata.data {
+                    cvec.push(v);
+                }
+            }
+            let wf = bincode::deserialize_from(cvec.clone().as_slice()).unwrap();
+            Ok(wf)
         })
     }
 }

@@ -8,7 +8,7 @@ rust-version = "1.71"
 [dependencies]
 web-time = "0.2.4"
 map_3d = "0.1.5"
-h_analyzer_grpc = { git = "https://github.com/HarukiUchito/h_analyzer_grpc.git" }
+h_analyzer_data = { git = "https://github.com/HarukiUchito/h_analyzer_grpc.git" }
 
 bincode = "1.3.3"
 tokio-stream = { version = "0.1" }

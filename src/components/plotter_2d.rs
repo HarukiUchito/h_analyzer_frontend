@@ -11,6 +11,7 @@ use polars::prelude::*;
 pub enum SeriesSource {
     DataFrame,
     GRPCClient,
+    PointCloud,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
@@ -186,6 +187,7 @@ impl Plotter2D {
                                 .selected_text(match info.source {
                                     SeriesSource::DataFrame => "DataFrme",
                                     SeriesSource::GRPCClient => "GRPC Client",
+                                    SeriesSource::PointCloud => "PointCloud",
                                 })
                                 .show_ui(ui, |ui| {
                                     ui.style_mut().wrap = Some(false);
@@ -200,6 +202,11 @@ impl Plotter2D {
                                         SeriesSource::GRPCClient,
                                         "GRPC Client",
                                     );
+                                    ui.selectable_value(
+                                        &mut info.source,
+                                        SeriesSource::PointCloud,
+                                        "PointCloud",
+                                    );
                                 });
                         });
                     });
@@ -210,6 +217,7 @@ impl Plotter2D {
                             SeriesSource::GRPCClient => {
                                 selector.select_backend_df(idx + 1, ui, common_data)
                             }
+                            SeriesSource::PointCloud => None,
                         };
                         ui.label("Plot Type");
                         egui::ComboBox::from_id_source(format!("plot_type_select_{}", idx))
@@ -282,85 +290,119 @@ impl Plotter2D {
         plot.show(ui, |plot_ui| {
             let mut df_select_iter = self.series_df_selectors.iter();
             for s_info in self.series_infos.iter() {
-                let df_id = unwrap_or_continue!(unwrap_or_continue!(df_select_iter.next())
-                    .dataframe_key
-                    .clone());
-                if !s_info.visible {
-                    continue;
-                }
-                let local_df = match s_info.source {
-                    SeriesSource::DataFrame => common_data
-                        .dataframes
-                        .get(&df_id)
-                        .map(|df_opt_pair| df_opt_pair.1.as_ref().map(|df_opt| df_opt.clone()))
-                        .unwrap_or_default(),
-                    SeriesSource::GRPCClient => common_data
-                        .realtime_dataframes
-                        .get(&df_id)
-                        .map(|df_opt| df_opt.clone()),
-                };
-                let mut local_df = unwrap_or_continue!(local_df);
-
-                if self.apply_x_limit {
-                    log::info!("{:?}", self.limit_x_range);
-                    let rt_col = local_df.column("Relative Time[s]").unwrap();
-                    let mask = rt_col.gt(self.limit_x_range.0).unwrap();
-                    local_df = local_df.filter(&mask).unwrap();
-                    let rt_col = local_df.column("Relative Time[s]").unwrap();
-                    let mask = rt_col.lt(self.limit_x_range.1).unwrap();
-                    local_df = local_df.filter(&mask).unwrap();
-                }
-
-                let colx = unwrap_or_continue!(&s_info.x_column);
-                let coly = unwrap_or_continue!(&s_info.y_column);
-                let xs = extract_series(&local_df, colx.as_str());
-                let ys = extract_series(&local_df, coly.as_str());
-                if xs.len() == 0 || ys.len() == 0 {
-                    continue;
-                }
-                let xys: Vec<[f64; 2]> = (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
-                //plot_ui.points(points)
-                if s_info.track_this {
-                    if let (Some(lx), Some(ly)) = (xs.last(), ys.last()) {
-                        let range = 0.1;
-                        plot_ui.set_plot_bounds(PlotBounds::from_min_max(
-                            [lx - range, ly - range],
-                            [lx + range, ly + range],
-                        ));
+                if s_info.source == SeriesSource::PointCloud {
+                    if let Some(worldframe) = &common_data.latest_world_frame {
+                        let pc = worldframe
+                            .entity_map
+                            .get(&"ego".to_string())
+                            .unwrap()
+                            .measurement_map
+                            .get(&"lidar".to_string())
+                            .unwrap();
+                        match pc {
+                            h_analyzer_data::Measurement::PointCloud2D(pc) => {
+                                log::info!("pc len {}", pc.points.len());
+                                let xs: Vec<f64> = pc.points.iter().map(|p| p.x).collect();
+                                let ys: Vec<f64> = pc.points.iter().map(|p| p.y).collect();
+                                if xs.len() == 0 || ys.len() == 0 {
+                                    continue;
+                                }
+                                let xys: Vec<[f64; 2]> =
+                                    (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
+                                plot_ui.points(
+                                    egui_plot::Points::new(xys)
+                                        .radius(5.0)
+                                        .filled(false)
+                                        .shape(egui_plot::MarkerShape::Diamond)
+                                        .name(&s_info.title),
+                                );
+                            }
+                            _ => {}
+                        }
                     }
-                }
-                match s_info.plot_type {
-                    PlotType::Point => {
-                        let line_obj = egui_plot::Line::new(xys.clone());
-                        plot_ui.line(line_obj);
-                        plot_ui.points(
-                            egui_plot::Points::new(xys)
-                                .radius(5.0)
-                                .filled(false)
-                                .shape(egui_plot::MarkerShape::Diamond)
-                                .name(&s_info.title),
-                        );
+                } else {
+                    // use dataframe for plotting
+                    let df_id = unwrap_or_continue!(unwrap_or_continue!(df_select_iter.next())
+                        .dataframe_key
+                        .clone());
+                    if !s_info.visible {
+                        continue;
                     }
-                    PlotType::Pose => {
-                        let col_theta = unwrap_or_continue!(&s_info.theta_column);
-                        let ts = extract_series(&local_df, col_theta.as_str());
-                        let xys2: Vec<[f64; 2]> = (0..xs.len())
-                            .map(|i| {
-                                [
-                                    xs[i] + s_info.marker_radius * ts[i].cos(),
-                                    ys[i] + s_info.marker_radius * ts[i].sin(),
-                                ]
-                            })
-                            .collect();
-                        let arrows = egui_plot::Arrows::new(xys.clone(), xys2);
-                        plot_ui.arrows(arrows);
+                    let local_df = match s_info.source {
+                        SeriesSource::DataFrame => common_data
+                            .dataframes
+                            .get(&df_id)
+                            .map(|df_opt_pair| df_opt_pair.1.as_ref().map(|df_opt| df_opt.clone()))
+                            .unwrap_or_default(),
+                        SeriesSource::GRPCClient => common_data
+                            .realtime_dataframes
+                            .get(&df_id)
+                            .map(|df_opt| df_opt.clone()),
+                        SeriesSource::PointCloud => None,
+                    };
+                    let mut local_df = unwrap_or_continue!(local_df);
 
-                        plot_ui.points(
-                            egui_plot::Points::new(xys)
-                                .radius(1.0)
-                                .filled(false)
-                                .name(&s_info.title),
-                        );
+                    if self.apply_x_limit {
+                        log::info!("{:?}", self.limit_x_range);
+                        let rt_col = local_df.column("Relative Time[s]").unwrap();
+                        let mask = rt_col.gt(self.limit_x_range.0).unwrap();
+                        local_df = local_df.filter(&mask).unwrap();
+                        let rt_col = local_df.column("Relative Time[s]").unwrap();
+                        let mask = rt_col.lt(self.limit_x_range.1).unwrap();
+                        local_df = local_df.filter(&mask).unwrap();
+                    }
+
+                    let colx = unwrap_or_continue!(&s_info.x_column);
+                    let coly = unwrap_or_continue!(&s_info.y_column);
+                    let xs = extract_series(&local_df, colx.as_str());
+                    let ys = extract_series(&local_df, coly.as_str());
+                    if xs.len() == 0 || ys.len() == 0 {
+                        continue;
+                    }
+                    let xys: Vec<[f64; 2]> = (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
+                    //plot_ui.points(points)
+                    if s_info.track_this {
+                        if let (Some(lx), Some(ly)) = (xs.last(), ys.last()) {
+                            let range = 0.1;
+                            plot_ui.set_plot_bounds(PlotBounds::from_min_max(
+                                [lx - range, ly - range],
+                                [lx + range, ly + range],
+                            ));
+                        }
+                    }
+                    match s_info.plot_type {
+                        PlotType::Point => {
+                            let line_obj = egui_plot::Line::new(xys.clone());
+                            plot_ui.line(line_obj);
+                            plot_ui.points(
+                                egui_plot::Points::new(xys)
+                                    .radius(5.0)
+                                    .filled(false)
+                                    .shape(egui_plot::MarkerShape::Diamond)
+                                    .name(&s_info.title),
+                            );
+                        }
+                        PlotType::Pose => {
+                            let col_theta = unwrap_or_continue!(&s_info.theta_column);
+                            let ts = extract_series(&local_df, col_theta.as_str());
+                            let xys2: Vec<[f64; 2]> = (0..xs.len())
+                                .map(|i| {
+                                    [
+                                        xs[i] + s_info.marker_radius * ts[i].cos(),
+                                        ys[i] + s_info.marker_radius * ts[i].sin(),
+                                    ]
+                                })
+                                .collect();
+                            let arrows = egui_plot::Arrows::new(xys.clone(), xys2);
+                            plot_ui.arrows(arrows);
+
+                            plot_ui.points(
+                                egui_plot::Points::new(xys)
+                                    .radius(1.0)
+                                    .filled(false)
+                                    .name(&s_info.title),
+                            );
+                        }
                     }
                 }
             }

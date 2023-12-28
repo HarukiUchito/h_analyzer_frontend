@@ -982,7 +982,7 @@ dependencies = [
  "egui_plot",
  "egui_tiles",
  "env_logger",
- "h_analyzer_grpc",
+ "h_analyzer_data",
  "log",
  "map_3d",
  "polars",
@@ -1556,9 +1556,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "h_analyzer_grpc"
+name = "h_analyzer_data"
 version = "0.1.0"
-source = "git+https://github.com/HarukiUchito/h_analyzer_grpc.git#b2e7773deeb79fd4cf6875e6388f6c5df57de2c7"
+source = "git+https://github.com/HarukiUchito/h_analyzer_grpc.git#eff632ef22235a32a07e9fc2993b24a7202a142d"
 dependencies = [
  "prost",
  "serde",

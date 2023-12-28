@@ -17,6 +17,10 @@ pub struct CommonData {
     pub current_path: String,
     pub default_path: String,
 
+    #[serde(skip)]
+    pub world_frame_promise: Option<Promise<Result<h_analyzer_data::WorldFrame, tonic::Status>>>,
+    pub latest_world_frame: Option<h_analyzer_data::WorldFrame>,
+
     pub realtime_dataframes: HashMap<String, DataFrame>,
     #[serde(skip)]
     pub realtime_promises: HashMap<
@@ -54,11 +58,15 @@ impl Default for CommonData {
         let init_df_list_promise = backend.request_initial_df_list();
         let fs_list_promise = backend.request_list(path.clone());
         let d_path_promise = backend.request_default_path();
+        let w_promise = backend.get_world_frame(0.0);
         Self {
             backend: backend,
             dataframes: HashMap::new(),
             current_path: path.clone(),
             default_path: path.clone(),
+
+            world_frame_promise: Some(w_promise),
+            latest_world_frame: None,
 
             realtime_dataframes: HashMap::new(),
             realtime_promises: HashMap::new(),
@@ -111,6 +119,7 @@ impl CommonData {
                         *r_promise_opt = Some(match metadata.element_type {
                             0 => self.backend.poll_point_2d_queue(df_id.clone()),
                             1 => self.backend.poll_pose_2d_queue(df_id.clone()),
+                            2 => self.backend.poll_point_cloud_2d_queue(df_id.clone()),
                             _ => panic!("unexpected element type"),
                         });
                     }
@@ -135,6 +144,9 @@ impl CommonData {
                                     ys.push(p.position.as_ref().unwrap().y);
                                     ts.push(p.theta);
                                 }
+                            }
+                            backend_talk::ResponseType::PointCloud2D(pointclouds) => {
+                                command = None;
                             }
                         }
                         if let Some(inner_df) = self.realtime_dataframes.get_mut(&df_id_str) {
@@ -168,6 +180,9 @@ impl CommonData {
                         1 => df!("x[m]" => &([] as [f64; 0]),
                         "y[m]" => &([] as [f64; 0]), "theta[rad]" => &([] as [f64; 0]))
                         .ok()?,
+                        2 => df!("x[m]" => &([] as [f64; 0]),
+                        "y[m]" => &([] as [f64; 0]), "theta[rad]" => &([] as [f64; 0]))
+                        .ok()?,
                         _ => panic!("unexpected element type"),
                     };
                     self.realtime_dataframes.insert(df_id_str, empty_df);
@@ -181,6 +196,17 @@ impl CommonData {
 
     pub fn update(&mut self) {
         self.update_realtime_dataframe();
+
+        if let Some(wf_promise) = &self.world_frame_promise {
+            if let Some(wf) = wf_promise.ready() {
+                if let Ok(wf) = wf {
+                    log::info!("world frame {}", wf);
+                    self.latest_world_frame = Some(wf.clone());
+                }
+                self.world_frame_promise = None;
+                self.world_frame_promise = Some(self.backend.get_world_frame(0.0));
+            }
+        }
 
         if let Some(init_df_list_promise) = &self.init_df_list_promise {
             if let Some(init_df_list) = init_df_list_promise.ready() {
