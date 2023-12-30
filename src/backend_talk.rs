@@ -38,6 +38,21 @@ impl BackendTalk {
         })
     }
 
+    pub fn get_world_list(
+        &self,
+    ) -> Promise<Result<grpc_data_transfer::WorldMetadataList, tonic::Status>> {
+        let addr = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_data_transfer::data_transfer2_d_client::DataTransfer2DClient::new(
+                    Client::new(addr),
+                );
+            let req = grpc_data_transfer::Empty {};
+            let resp = query_client.get_world_list(req).await?.into_inner();
+            Ok(resp)
+        })
+    }
+
     pub fn poll_point_2d_queue(
         &self,
         id: grpc_data_transfer::SeriesId,
@@ -185,6 +200,7 @@ impl BackendTalk {
 
     pub fn get_world_frame(
         &self,
+        world_name: String,
         unix_timestamp: f64,
     ) -> Promise<Result<h_analyzer_data::WorldFrame, tonic::Status>> {
         let base_url = self.server_address.clone();
@@ -194,8 +210,11 @@ impl BackendTalk {
                     Client::new(base_url),
                 );
 
-            let req = grpc_data_transfer::UnixTimeStamp {
-                value: unix_timestamp,
+            let req = grpc_data_transfer::GetWorldFrameRequest {
+                id: Some(grpc_data_transfer::WorldId { id: world_name }),
+                timestamp: Some(grpc_data_transfer::UnixTimeStamp {
+                    value: unix_timestamp,
+                }),
             };
             let mut stream = query_client.get_world_frame(req).await?.into_inner();
 

@@ -1,16 +1,66 @@
-use std::borrow::Borrow;
-
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
 use crate::common_data;
 use crate::components::{dataframe_table, explorer, modal_window, plotter_2d};
 use eframe::egui::{self, FontData};
 
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct WorldPlayer {
+    selected_world_name: Option<String>,
+}
+
+impl Default for WorldPlayer {
+    fn default() -> Self {
+        Self {
+            selected_world_name: None,
+        }
+    }
+}
+
+impl WorldPlayer {
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        common_data_arc: std::sync::Arc<std::sync::Mutex<common_data::CommonData>>,
+    ) {
+        let common_data = common_data_arc.lock();
+        if common_data.is_err() {
+            return;
+        }
+        let common_data = &mut common_data.unwrap();
+        ui.horizontal(|ui| {
+            ui.label("World Player");
+            if ui.button("Update World List").clicked() {
+                common_data.update_world_list();
+            }
+            let world_list_opt = common_data.get_world_list();
+            if let Some(world_list) = world_list_opt {
+                egui::ComboBox::from_id_source("world_select")
+                    .selected_text(self.selected_world_name.clone().unwrap_or_default())
+                    .show_ui(ui, |ui| {
+                        ui.style_mut().wrap = Some(false);
+                        ui.set_min_width(60.0);
+                        for world_meta in world_list.list.iter() {
+                            let txt = world_meta.id.clone().unwrap().id;
+                            ui.selectable_value(
+                                &mut self.selected_world_name,
+                                Some(txt.clone()),
+                                txt,
+                            );
+                        }
+                    });
+            }
+        });
+    }
+}
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
     tree: egui_tiles::Tree<Pane>,
+
+    world_player: WorldPlayer,
 
     #[serde(skip)]
     behavior: TreeBehavior,
@@ -67,6 +117,7 @@ impl Default for TemplateApp {
 
         Self {
             tree: tree,
+            world_player: WorldPlayer::default(),
             behavior: TreeBehavior::new(common_data_arc.clone()),
             last_tree_debug: Default::default(),
             explorer: explorer::Explorer::default(),
@@ -225,7 +276,7 @@ impl eframe::App for TemplateApp {
         });
 
         egui::TopBottomPanel::bottom("bottom").show(ctx, |ui| {
-            ui.label("Progress");
+            self.world_player.show(ui, self.common_data.clone());
         });
     }
 }
@@ -282,25 +333,6 @@ impl PerformancePlot {
                     )
                     .name("series list"),
                 );
-                /*
-                for (k, v) in self.history_map.iter_mut() {
-                    let bars: Vec<egui_plot::Bar> = v
-                        .iter()
-                        .enumerate()
-                        .map(|(i, &v)| -> egui_plot::Bar { egui_plot::Bar::new(i as f64, v) })
-                        .collect();
-                    let bar_chart = egui_plot::BarChart::new(bars).width(0.8).name(k).stack_on(
-                        bar_charts
-                            .iter()
-                            .collect::<Vec<&egui_plot::BarChart>>()
-                            .as_slice(),
-                    );
-                    bar_charts.push(bar_chart);
-                }
-                for bar_chart in bar_charts.drain(..) {
-                    plot_ui.bar_chart(bar_chart);
-                }
-                */
             })
             .response;
         Some(())

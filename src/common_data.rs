@@ -18,6 +18,9 @@ pub struct CommonData {
     pub default_path: String,
 
     #[serde(skip)]
+    pub world_list_promise: Option<Promise<Result<grpc_data_transfer::WorldMetadataList, tonic::Status>>>,
+
+    #[serde(skip)]
     pub world_frame_promise: Option<Promise<Result<h_analyzer_data::WorldFrame, tonic::Status>>>,
     pub latest_world_frame: Option<h_analyzer_data::WorldFrame>,
 
@@ -58,13 +61,14 @@ impl Default for CommonData {
         let init_df_list_promise = backend.request_initial_df_list();
         let fs_list_promise = backend.request_list(path.clone());
         let d_path_promise = backend.request_default_path();
-        let w_promise = backend.get_world_frame(0.0);
+        let w_promise = backend.get_world_frame("slam".to_string(),0.0);
         Self {
             backend: backend,
             dataframes: HashMap::new(),
             current_path: path.clone(),
             default_path: path.clone(),
 
+            world_list_promise: None,
             world_frame_promise: Some(w_promise),
             latest_world_frame: None,
 
@@ -85,6 +89,20 @@ impl Default for CommonData {
 }
 
 impl CommonData {
+    pub fn update_world_list(&mut self) {
+        self.world_list_promise = Some(self.backend.get_world_list());
+    }
+
+    pub fn get_world_list(&mut self) -> Option<grpc_data_transfer::WorldMetadataList> {
+        if let Some(world_list_promise) = &self.world_list_promise {
+            if let Ok(world_list) = world_list_promise.ready()? {
+                let ret=  world_list.clone();
+                return Some(ret);
+            }
+        }
+        None
+    }
+
     pub fn save_df_list(&mut self) {
         let mut dfi_list = Vec::new();
         for (_, (df_info, _)) in self.dataframes.iter() {
@@ -204,7 +222,7 @@ impl CommonData {
                     self.latest_world_frame = Some(wf.clone());
                 }
                 self.world_frame_promise = None;
-                self.world_frame_promise = Some(self.backend.get_world_frame(0.0));
+                self.world_frame_promise = Some(self.backend.get_world_frame("slam".to_string(), 0.0));
             }
         }
 

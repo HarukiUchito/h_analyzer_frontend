@@ -11,7 +11,7 @@ use polars::prelude::*;
 pub enum SeriesSource {
     DataFrame,
     GRPCClient,
-    PointCloud,
+    WorldFrame,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
@@ -187,7 +187,7 @@ impl Plotter2D {
                                 .selected_text(match info.source {
                                     SeriesSource::DataFrame => "DataFrme",
                                     SeriesSource::GRPCClient => "GRPC Client",
-                                    SeriesSource::PointCloud => "PointCloud",
+                                    SeriesSource::WorldFrame => "WorldFrame",
                                 })
                                 .show_ui(ui, |ui| {
                                     ui.style_mut().wrap = Some(false);
@@ -204,8 +204,8 @@ impl Plotter2D {
                                     );
                                     ui.selectable_value(
                                         &mut info.source,
-                                        SeriesSource::PointCloud,
-                                        "PointCloud",
+                                        SeriesSource::WorldFrame,
+                                        "WorldFrame",
                                     );
                                 });
                         });
@@ -217,7 +217,7 @@ impl Plotter2D {
                             SeriesSource::GRPCClient => {
                                 selector.select_backend_df(idx + 1, ui, common_data)
                             }
-                            SeriesSource::PointCloud => None,
+                            SeriesSource::WorldFrame => None,
                         };
                         ui.label("Plot Type");
                         egui::ComboBox::from_id_source(format!("plot_type_select_{}", idx))
@@ -290,7 +290,7 @@ impl Plotter2D {
         plot.show(ui, |plot_ui| {
             let mut df_select_iter = self.series_df_selectors.iter();
             for s_info in self.series_infos.iter() {
-                if s_info.source == SeriesSource::PointCloud {
+                if s_info.source == SeriesSource::WorldFrame {
                     if let Some(worldframe) = &common_data.latest_world_frame {
                         let pc = worldframe
                             .entity_map
@@ -338,7 +338,7 @@ impl Plotter2D {
                             .realtime_dataframes
                             .get(&df_id)
                             .map(|df_opt| df_opt.clone()),
-                        SeriesSource::PointCloud => None,
+                        SeriesSource::WorldFrame => None,
                     };
                     let mut local_df = unwrap_or_continue!(local_df);
 
@@ -404,7 +404,7 @@ impl Plotter2D {
                             );
                         }
                     }
-                }
+                };
             }
         });
     }
