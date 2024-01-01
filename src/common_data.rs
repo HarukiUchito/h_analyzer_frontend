@@ -212,7 +212,7 @@ impl CommonData {
         None
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self, selected_world_name: Option<String>) {
         self.update_realtime_dataframe();
 
         if let Some(wf_promise) = &self.world_frame_promise {
@@ -221,8 +221,12 @@ impl CommonData {
                     log::info!("world frame {}", wf);
                     self.latest_world_frame = Some(wf.clone());
                 }
-                self.world_frame_promise = None;
-                self.world_frame_promise = Some(self.backend.get_world_frame("slam".to_string(), 0.0));
+                let selected_world_name = if let Some(name) = selected_world_name {
+                    name
+                } else {
+                    "slam".to_string()
+                };
+                self.world_frame_promise = Some(self.backend.get_world_frame(selected_world_name, 0.0));
             }
         }
 

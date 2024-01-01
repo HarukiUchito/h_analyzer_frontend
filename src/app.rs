@@ -210,7 +210,8 @@ impl eframe::App for TemplateApp {
             //
             // Data update
             //
-            cdata.update();
+            let selected_world_name = self.world_player.selected_world_name.clone();
+            cdata.update(selected_world_name);
 
             //
             // View update

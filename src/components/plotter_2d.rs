@@ -5,6 +5,7 @@ use crate::unwrap_or_continue;
 
 use eframe::egui::{self};
 use egui_plot::PlotBounds;
+use h_analyzer_data::WorldFrame;
 use polars::prelude::*;
 
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
@@ -20,11 +21,24 @@ pub enum PlotType {
     Pose,
 }
 
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
+pub enum EntityVizTarget {
+    Measurement,
+    Estimate,
+}
+
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 //#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct SeriesInfo {
     title: String,
     source: SeriesSource,
+
+    // entity plot settings
+    entity_name: Option<String>,
+    entity_elem_target: Option<EntityVizTarget>,
+    entity_elem_id: Option<String>,
+
+    // df plot settings
     plot_type: PlotType,
     df_id: Option<String>,
     visible: bool,
@@ -40,6 +54,11 @@ impl Default for SeriesInfo {
         Self {
             title: "".to_string(),
             source: SeriesSource::DataFrame,
+
+            entity_name: None,
+            entity_elem_target: None,
+            entity_elem_id: None,
+
             plot_type: PlotType::Point,
             df_id: None,
             visible: true,
@@ -77,6 +96,79 @@ impl Default for Plotter2D {
 }
 
 impl Plotter2D {
+    fn entity_settings(
+        idx: usize,
+        info: &mut SeriesInfo,
+        ui: &mut egui::Ui,
+        world_frame_opt: &Option<WorldFrame>,
+    ) -> Option<()> {
+        if world_frame_opt.is_none() {
+            return None;
+        }
+        let world_frame = world_frame_opt.as_ref().unwrap();
+        ui.label("[Entity Settings] name:");
+        egui::ComboBox::from_id_source(format!("entity_select_{}", idx))
+            .selected_text(info.entity_name.as_deref().unwrap_or_default())
+            .show_ui(ui, |ui| {
+                ui.style_mut().wrap = Some(false);
+                ui.set_min_width(60.0);
+                for (name, _) in world_frame.entity_map.iter() {
+                    ui.selectable_value(&mut info.entity_name, Some(name.clone()), name);
+                }
+            });
+        egui::ComboBox::from_id_source(format!("entity_viz_target_{}", idx))
+            .selected_text(match info.entity_elem_target {
+                Some(EntityVizTarget::Estimate) => "Estimate",
+                Some(EntityVizTarget::Measurement) => "Measurement",
+                None => "",
+            })
+            .show_ui(ui, |ui| {
+                ui.style_mut().wrap = Some(false);
+                ui.set_min_width(60.0);
+                ui.selectable_value(
+                    &mut info.entity_elem_target,
+                    Some(EntityVizTarget::Measurement),
+                    "Measurement",
+                );
+                ui.selectable_value(
+                    &mut info.entity_elem_target,
+                    Some(EntityVizTarget::Estimate),
+                    "Estimate",
+                );
+            });
+        let entity_name = info.entity_name.clone()?;
+        if let Some(entity) = world_frame.entity_map.get(&entity_name) {
+            egui::ComboBox::from_id_source(format!("entity_elem_select_{}", idx))
+                .selected_text(info.entity_elem_id.as_deref().unwrap_or_default())
+                .show_ui(ui, |ui| {
+                    ui.style_mut().wrap = Some(false);
+                    ui.set_min_width(60.0);
+                    match info.entity_elem_target {
+                        Some(EntityVizTarget::Measurement) => {
+                            for (name, _) in entity.measurement_map.iter() {
+                                ui.selectable_value(
+                                    &mut info.entity_elem_id,
+                                    Some(name.clone()),
+                                    name,
+                                );
+                            }
+                        }
+                        Some(EntityVizTarget::Estimate) => {
+                            for (name, _) in entity.estimate_map.iter() {
+                                ui.selectable_value(
+                                    &mut info.entity_elem_id,
+                                    Some(name.clone()),
+                                    name,
+                                );
+                            }
+                        }
+                        None => {}
+                    }
+                });
+        }
+        None
+    }
+
     fn series_settings(
         idx: usize,
         info: &mut SeriesInfo,
@@ -115,12 +207,6 @@ impl Plotter2D {
                         ui.selectable_value(&mut info.theta_column, Some(cname.to_string()), cname);
                     }
                 });
-            ui.add(
-                egui::DragValue::new(&mut info.marker_radius)
-                    .speed(0.1)
-                    .clamp_range(0.0..=f64::INFINITY)
-                    .prefix("marker size: "),
-            );
         }
 
         None
@@ -165,80 +251,72 @@ impl Plotter2D {
                 let num = self.series_infos.len();
                 let mut sinfo_iter = self.series_infos.iter_mut();
                 for idx in 0..num {
-                    let info = sinfo_iter.next().unwrap();
+                    let info = unwrap_or_continue!(sinfo_iter.next());
                     ui.separator();
-
-                    let selector = unwrap_or_continue!(selector_iter.next());
                     ui.horizontal(|ui| {
-                        ui.push_id(format!("sname_{}", idx), |ui| {
-                            ui.label(format!("Series {}, ", idx));
-                            ui.add(
-                                egui::TextEdit::singleline(&mut info.title)
-                                    .hint_text("title of the series"),
-                            );
-                            if ui.button("delete").clicked() {
-                                del_idx = Some(idx);
-                            }
-                            ui.checkbox(&mut info.visible, "visible");
-                            ui.label("source: ");
-                        });
-                        ui.push_id(format!("df_source_{}", idx), |ui| {
-                            egui::ComboBox::from_id_source(idx)
-                                .selected_text(match info.source {
-                                    SeriesSource::DataFrame => "DataFrme",
-                                    SeriesSource::GRPCClient => "GRPC Client",
-                                    SeriesSource::WorldFrame => "WorldFrame",
+                        del_idx = Plotter2D::general_series_settings_ui(idx, info, ui);
+                    });
+                    if info.source == SeriesSource::DataFrame
+                        || info.source == SeriesSource::GRPCClient
+                    {
+                        let mut series_df = None;
+                        let selector = unwrap_or_continue!(selector_iter.next());
+                        ui.horizontal(|ui| {
+                            series_df = match info.source {
+                                SeriesSource::DataFrame => {
+                                    selector.select_df(idx + 1, ui, common_data)
+                                }
+                                SeriesSource::GRPCClient => {
+                                    selector.select_backend_df(idx + 1, ui, common_data)
+                                }
+                                SeriesSource::WorldFrame => None,
+                            };
+
+                            ui.label("Plot Type");
+                            egui::ComboBox::from_id_source(format!("plot_type_select_{}", idx))
+                                .selected_text(match info.plot_type {
+                                    PlotType::Point => "Point",
+                                    PlotType::Pose => "Pose",
                                 })
                                 .show_ui(ui, |ui| {
                                     ui.style_mut().wrap = Some(false);
                                     ui.set_min_width(60.0);
                                     ui.selectable_value(
-                                        &mut info.source,
-                                        SeriesSource::DataFrame,
-                                        "DataFrame",
+                                        &mut info.plot_type,
+                                        PlotType::Point,
+                                        "Point",
                                     );
                                     ui.selectable_value(
-                                        &mut info.source,
-                                        SeriesSource::GRPCClient,
-                                        "GRPC Client",
-                                    );
-                                    ui.selectable_value(
-                                        &mut info.source,
-                                        SeriesSource::WorldFrame,
-                                        "WorldFrame",
+                                        &mut info.plot_type,
+                                        PlotType::Pose,
+                                        "Pose",
                                     );
                                 });
-                        });
-                    });
-                    let mut series_df = None;
-                    ui.horizontal(|ui| {
-                        series_df = match info.source {
-                            SeriesSource::DataFrame => selector.select_df(idx + 1, ui, common_data),
-                            SeriesSource::GRPCClient => {
-                                selector.select_backend_df(idx + 1, ui, common_data)
-                            }
-                            SeriesSource::WorldFrame => None,
-                        };
-                        ui.label("Plot Type");
-                        egui::ComboBox::from_id_source(format!("plot_type_select_{}", idx))
-                            .selected_text(match info.plot_type {
-                                PlotType::Point => "Point",
-                                PlotType::Pose => "Pose",
-                            })
-                            .show_ui(ui, |ui| {
-                                ui.style_mut().wrap = Some(false);
-                                ui.set_min_width(60.0);
-                                ui.selectable_value(&mut info.plot_type, PlotType::Point, "Point");
-                                ui.selectable_value(&mut info.plot_type, PlotType::Pose, "Pose");
-                            });
-                    });
-                    ui.horizontal(|ui| {
-                        Plotter2D::series_settings(idx + 1, info, ui, series_df);
+                            ui.horizontal(|ui| {
+                                Plotter2D::series_settings(idx + 1, info, ui, series_df);
 
-                        ui.push_id(format!("track_this_{}", idx), |ui| {
-                            ui.checkbox(&mut info.track_this, "track_this");
+                                ui.push_id(format!("track_this_{}", idx), |ui| {
+                                    ui.checkbox(&mut info.track_this, "track_this");
+                                });
+                            });
                         });
-                    });
+                    } else if info.source == SeriesSource::WorldFrame {
+                        ui.horizontal(|ui| {
+                            Plotter2D::entity_settings(
+                                idx,
+                                info,
+                                ui,
+                                &common_data.latest_world_frame,
+                            );
+                        });
+                    }
+
+                    ui.add(
+                        egui::DragValue::new(&mut info.marker_radius)
+                            .speed(0.1)
+                            .clamp_range(0.0..=f64::INFINITY)
+                            .prefix("marker size: "),
+                    );
                 }
 
                 if let Some(del_idx) = del_idx {
@@ -291,34 +369,65 @@ impl Plotter2D {
             let mut df_select_iter = self.series_df_selectors.iter();
             for s_info in self.series_infos.iter() {
                 if s_info.source == SeriesSource::WorldFrame {
-                    if let Some(worldframe) = &common_data.latest_world_frame {
-                        let pc = worldframe
-                            .entity_map
-                            .get(&"ego".to_string())
-                            .unwrap()
-                            .measurement_map
-                            .get(&"lidar".to_string())
-                            .unwrap();
-                        match pc {
-                            h_analyzer_data::Measurement::PointCloud2D(pc) => {
-                                log::info!("pc len {}", pc.points.len());
-                                let xs: Vec<f64> = pc.points.iter().map(|p| p.x).collect();
-                                let ys: Vec<f64> = pc.points.iter().map(|p| p.y).collect();
-                                if xs.len() == 0 || ys.len() == 0 {
-                                    continue;
+                    let worldframe = unwrap_or_continue!(&common_data.latest_world_frame);
+                    let entity_name = unwrap_or_continue!(s_info.entity_name.clone());
+                    let entity = unwrap_or_continue!(worldframe.entity_map.get(&entity_name));
+                    let elem_id = unwrap_or_continue!(s_info.entity_elem_id.clone());
+                    match s_info.entity_elem_target {
+                        Some(EntityVizTarget::Measurement) => {
+                            let measurement =
+                                unwrap_or_continue!(entity.measurement_map.get(&elem_id));
+                            match measurement {
+                                h_analyzer_data::Measurement::PointCloud2D(pc) => {
+                                    let xs: Vec<f64> = pc.points.iter().map(|p| p.x).collect();
+                                    let ys: Vec<f64> = pc.points.iter().map(|p| p.y).collect();
+                                    if xs.len() == 0 || ys.len() == 0 {
+                                        continue;
+                                    }
+                                    let xys: Vec<[f64; 2]> =
+                                        (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
+                                    plot_ui.points(
+                                        egui_plot::Points::new(xys)
+                                            .radius(s_info.marker_radius as f32)
+                                            .filled(false)
+                                            .shape(egui_plot::MarkerShape::Diamond)
+                                            .name(&s_info.title),
+                                    );
                                 }
-                                let xys: Vec<[f64; 2]> =
-                                    (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
-                                plot_ui.points(
-                                    egui_plot::Points::new(xys)
-                                        .radius(5.0)
-                                        .filled(false)
-                                        .shape(egui_plot::MarkerShape::Diamond)
-                                        .name(&s_info.title),
-                                );
+                                _ => {}
                             }
-                            _ => {}
                         }
+                        Some(EntityVizTarget::Estimate) => {
+                            let estimate = unwrap_or_continue!(entity.estimate_map.get(&elem_id));
+                            match estimate {
+                                h_analyzer_data::Estimate::Pose2D(pose) => {
+                                    log::info!("pose : {:?}", pose);
+                                    let xs = vec![pose.position.x];
+                                    let ys = vec![pose.position.y];
+                                    let xys: Vec<[f64; 2]> =
+                                        (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
+                                    let ts = vec![pose.theta];
+                                    let xys2: Vec<[f64; 2]> = (0..xs.len())
+                                        .map(|i| {
+                                            [
+                                                xs[i] + s_info.marker_radius * ts[i].cos(),
+                                                ys[i] + s_info.marker_radius * ts[i].sin(),
+                                            ]
+                                        })
+                                        .collect();
+                                    let arrows = egui_plot::Arrows::new(xys.clone(), xys2);
+                                    plot_ui.arrows(arrows);
+
+                                    plot_ui.points(
+                                        egui_plot::Points::new(xys)
+                                            .radius(1.0)
+                                            .filled(false)
+                                            .name(&s_info.title),
+                                    );
+                                }
+                            }
+                        }
+                        None => {}
                     }
                 } else {
                     // use dataframe for plotting
@@ -407,5 +516,38 @@ impl Plotter2D {
                 };
             }
         });
+    }
+
+    fn general_series_settings_ui(
+        idx: usize,
+        info: &mut SeriesInfo,
+        ui: &mut egui::Ui,
+    ) -> Option<usize> {
+        let mut delete_idx = None;
+        ui.push_id(format!("sname_{}", idx), |ui| {
+            ui.label(format!("Series {}, ", idx));
+            ui.add(egui::TextEdit::singleline(&mut info.title).hint_text("title of the series"));
+            if ui.button("delete").clicked() {
+                delete_idx = Some(idx);
+            }
+            ui.checkbox(&mut info.visible, "visible");
+            ui.label("source: ");
+        });
+        ui.push_id(format!("df_source_{}", idx), |ui| {
+            egui::ComboBox::from_id_source(idx)
+                .selected_text(match info.source {
+                    SeriesSource::DataFrame => "DataFrme",
+                    SeriesSource::GRPCClient => "GRPC Client",
+                    SeriesSource::WorldFrame => "WorldFrame",
+                })
+                .show_ui(ui, |ui| {
+                    ui.style_mut().wrap = Some(false);
+                    ui.set_min_width(60.0);
+                    ui.selectable_value(&mut info.source, SeriesSource::DataFrame, "DataFrame");
+                    ui.selectable_value(&mut info.source, SeriesSource::GRPCClient, "GRPC Client");
+                    ui.selectable_value(&mut info.source, SeriesSource::WorldFrame, "WorldFrame");
+                });
+        });
+        delete_idx
     }
 }
