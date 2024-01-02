@@ -45,10 +45,24 @@ impl WorldPlayer {
                             ui.selectable_value(
                                 &mut self.selected_world_name,
                                 Some(txt.clone()),
-                                txt,
+                                txt.clone(),
                             );
                         }
                     });
+                let mut history_len = 0;
+                if let Some(selected_name) = &self.selected_world_name {
+                    for world_meta in world_list.list.iter() {
+                        if world_meta.id.clone().unwrap().id == *selected_name {
+                            history_len = world_meta.total_frame_num;
+                        }
+                    }
+                }
+                if let Some(wf) = &common_data.latest_world_frame {
+                    ui.label(format!(
+                        "current frame : {} / {}",
+                        wf.frame_index, history_len
+                    ));
+                }
             }
         });
     }

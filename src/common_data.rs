@@ -62,13 +62,14 @@ impl Default for CommonData {
         let fs_list_promise = backend.request_list(path.clone());
         let d_path_promise = backend.request_default_path();
         let w_promise = backend.get_world_frame("slam".to_string(),0.0);
+        let wl_promise = backend.get_world_list();
         Self {
             backend: backend,
             dataframes: HashMap::new(),
             current_path: path.clone(),
             default_path: path.clone(),
 
-            world_list_promise: None,
+            world_list_promise: Some(wl_promise),
             world_frame_promise: Some(w_promise),
             latest_world_frame: None,
 
