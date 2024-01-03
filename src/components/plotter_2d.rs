@@ -311,12 +311,15 @@ impl Plotter2D {
                         });
                     }
 
-                    ui.add(
-                        egui::DragValue::new(&mut info.marker_radius)
-                            .speed(0.1)
-                            .clamp_range(0.0..=f64::INFINITY)
-                            .prefix("marker size: "),
-                    );
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut info.track_this, "track_this");
+                        ui.add(
+                            egui::DragValue::new(&mut info.marker_radius)
+                                .speed(0.1)
+                                .clamp_range(0.0..=f64::INFINITY)
+                                .prefix("marker size: "),
+                        );
+                    });
                 }
 
                 if let Some(del_idx) = del_idx {
@@ -404,6 +407,15 @@ impl Plotter2D {
                                     log::info!("pose : {:?}", pose);
                                     let xs = vec![pose.position.x];
                                     let ys = vec![pose.position.y];
+                                    if s_info.track_this {
+                                        if let (Some(lx), Some(ly)) = (xs.last(), ys.last()) {
+                                            let range = 3.0;
+                                            plot_ui.set_plot_bounds(PlotBounds::from_min_max(
+                                                [lx - range, ly - range],
+                                                [lx + range, ly + range],
+                                            ));
+                                        }
+                                    }
                                     let xys: Vec<[f64; 2]> =
                                         (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
                                     let ts = vec![pose.theta];
