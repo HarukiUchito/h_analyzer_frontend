@@ -11,7 +11,6 @@ use polars::prelude::*;
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
 pub enum SeriesSource {
     DataFrame,
-    GRPCClient,
     WorldFrame,
 }
 
@@ -256,18 +255,13 @@ impl Plotter2D {
                     ui.horizontal(|ui| {
                         del_idx = Plotter2D::general_series_settings_ui(idx, info, ui);
                     });
-                    if info.source == SeriesSource::DataFrame
-                        || info.source == SeriesSource::GRPCClient
-                    {
+                    if info.source == SeriesSource::DataFrame {
                         let mut series_df = None;
                         let selector = unwrap_or_continue!(selector_iter.next());
                         ui.horizontal(|ui| {
                             series_df = match info.source {
                                 SeriesSource::DataFrame => {
                                     selector.select_df(idx + 1, ui, common_data)
-                                }
-                                SeriesSource::GRPCClient => {
-                                    selector.select_backend_df(idx + 1, ui, common_data)
                                 }
                                 SeriesSource::WorldFrame => None,
                             };
@@ -478,10 +472,6 @@ impl Plotter2D {
                             .get(&df_id)
                             .map(|df_opt_pair| df_opt_pair.1.as_ref().map(|df_opt| df_opt.clone()))
                             .unwrap_or_default(),
-                        SeriesSource::GRPCClient => common_data
-                            .realtime_dataframes
-                            .get(&df_id)
-                            .map(|df_opt| df_opt.clone()),
                         SeriesSource::WorldFrame => None,
                     };
                     let mut local_df = unwrap_or_continue!(local_df);
@@ -572,14 +562,12 @@ impl Plotter2D {
             egui::ComboBox::from_id_source(idx)
                 .selected_text(match info.source {
                     SeriesSource::DataFrame => "DataFrme",
-                    SeriesSource::GRPCClient => "GRPC Client",
                     SeriesSource::WorldFrame => "WorldFrame",
                 })
                 .show_ui(ui, |ui| {
                     ui.style_mut().wrap = Some(false);
                     ui.set_min_width(60.0);
                     ui.selectable_value(&mut info.source, SeriesSource::DataFrame, "DataFrame");
-                    ui.selectable_value(&mut info.source, SeriesSource::GRPCClient, "GRPC Client");
                     ui.selectable_value(&mut info.source, SeriesSource::WorldFrame, "WorldFrame");
                 });
         });

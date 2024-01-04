@@ -18,21 +18,13 @@ pub struct CommonData {
     pub default_path: String,
 
     #[serde(skip)]
-    pub world_list_promise: Option<Promise<Result<grpc_data_transfer::WorldMetadataList, tonic::Status>>>,
+    pub world_list_promise:
+        Option<Promise<Result<grpc_data_transfer::WorldMetadataList, tonic::Status>>>,
 
     #[serde(skip)]
     pub world_frame_promise: Option<Promise<Result<h_analyzer_data::WorldFrame, tonic::Status>>>,
     pub world: h_analyzer_data::World,
 
-    pub realtime_dataframes: HashMap<String, DataFrame>,
-    #[serde(skip)]
-    pub realtime_promises: HashMap<
-        grpc_data_transfer::SeriesId,
-        Option<Promise<Result<backend_talk::ResponseType, tonic::Status>>>,
-    >,
-    #[serde(skip)]
-    pub series_list_promise:
-        Option<Promise<Result<grpc_data_transfer::SeriesMetadataList, tonic::Status>>>,
     #[serde(skip)]
     series_list_req_time: web_time::Instant,
     pub sl_time_history: std::collections::VecDeque<f64>,
@@ -61,7 +53,7 @@ impl Default for CommonData {
         let init_df_list_promise = backend.request_initial_df_list();
         let fs_list_promise = backend.request_list(path.clone());
         let d_path_promise = backend.request_default_path();
-        let w_promise = backend.get_world_frame("slam".to_string(),0.0);
+        let w_promise = backend.get_world_frame("slam".to_string(), 0.0);
         let wl_promise = backend.get_world_list();
         Self {
             backend: backend,
@@ -73,9 +65,6 @@ impl Default for CommonData {
             world_frame_promise: Some(w_promise),
             world: h_analyzer_data::World::new(),
 
-            realtime_dataframes: HashMap::new(),
-            realtime_promises: HashMap::new(),
-            series_list_promise: None,
             series_list_req_time: web_time::Instant::now(),
             sl_time_history: std::collections::VecDeque::new(),
 
@@ -97,7 +86,7 @@ impl CommonData {
     pub fn get_world_list(&mut self) -> Option<grpc_data_transfer::WorldMetadataList> {
         if let Some(world_list_promise) = &self.world_list_promise {
             if let Ok(world_list) = world_list_promise.ready()? {
-                let ret=  world_list.clone();
+                let ret = world_list.clone();
                 return Some(ret);
             }
         }
@@ -115,124 +104,33 @@ impl CommonData {
         self.save_df_list_promise = Some(self.backend.save_df_list(dfi_list));
     }
 
-    fn update_realtime_dataframe(&mut self) -> Option<()> {
-        if self.series_list_promise.is_none() {
-            self.series_list_promise = Some(self.backend.get_series_list());
-            self.series_list_req_time = web_time::Instant::now();
-        }
-
-        let series_list = self.series_list_promise.as_ref()?.ready()?.as_ref().ok()?;
-        let et = self.series_list_req_time.elapsed().as_nanos() as f64;
-        self.sl_time_history.push_back(et * 1e-9);
-        if self.sl_time_history.len() > 10 {
-            self.sl_time_history.pop_front();
-        }
-
-        //log::info!("{:?}", series_list);
-        for metadata in series_list.list.iter() {
-            let df_id = unwrap_or_continue!(metadata.clone().id);
-            let df_id_str = df_id.id.clone();
-            match self.realtime_promises.get_mut(&df_id) {
-                Some(r_promise_opt) => {
-                    if r_promise_opt.is_none() {
-                        *r_promise_opt = Some(match metadata.element_type {
-                            0 => self.backend.poll_point_2d_queue(df_id.clone()),
-                            1 => self.backend.poll_pose_2d_queue(df_id.clone()),
-                            2 => self.backend.poll_point_cloud_2d_queue(df_id.clone()),
-                            _ => panic!("unexpected element type"),
-                        });
-                    }
-                    let new_poll = unwrap_or_continue!(r_promise_opt).ready()?;
-                    if let Ok(new_poll) = new_poll {
-                        let mut xs = Vec::new();
-                        let mut ys = Vec::new();
-                        let mut ts = Vec::new();
-                        let mut command = None;
-                        match new_poll {
-                            backend_talk::ResponseType::Point2D(points) => {
-                                command = Some(points.command);
-                                for p in points.points.iter() {
-                                    xs.push(p.x);
-                                    ys.push(p.y);
-                                }
-                            }
-                            backend_talk::ResponseType::Pose2D(poses) => {
-                                command = Some(poses.command);
-                                for p in poses.poses.iter() {
-                                    xs.push(p.position.as_ref().unwrap().x);
-                                    ys.push(p.position.as_ref().unwrap().y);
-                                    ts.push(p.theta);
-                                }
-                            }
-                            backend_talk::ResponseType::PointCloud2D(pointclouds) => {
-                                command = None;
-                            }
-                        }
-                        if let Some(inner_df) = self.realtime_dataframes.get_mut(&df_id_str) {
-                            if let Some(command) = command {
-                                match command {
-                                    1 => {
-                                        *inner_df = inner_df.clear();
-                                    }
-                                    _ => {
-                                        let new_df = match metadata.element_type {
-                                            0 => df!("x[m]" => &xs,
-                                    "y[m]" => &ys)
-                                            .unwrap(),
-                                            1 => 
-                                                df!("x[m]" => &xs, "y[m]" => &ys, "theta[rad]" => &ts).unwrap(),
-                                            _ => panic!("unexpected element type"),
-                                        };
-                                        *inner_df = inner_df.vstack(&new_df).unwrap();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    *r_promise_opt = None;
-                }
-                None => {
-                    let empty_df = match metadata.element_type {
-                        0 => df!("x[m]" => &([] as [f64; 0]),
-                    "y[m]" => &([] as [f64; 0]))
-                        .ok()?,
-                        1 => df!("x[m]" => &([] as [f64; 0]),
-                        "y[m]" => &([] as [f64; 0]), "theta[rad]" => &([] as [f64; 0]))
-                        .ok()?,
-                        2 => df!("x[m]" => &([] as [f64; 0]),
-                        "y[m]" => &([] as [f64; 0]), "theta[rad]" => &([] as [f64; 0]))
-                        .ok()?,
-                        _ => panic!("unexpected element type"),
-                    };
-                    self.realtime_dataframes.insert(df_id_str, empty_df);
-                    self.realtime_promises.insert(df_id.clone(), None);
-                }
-            }
-        }
-        self.series_list_promise = None;
-        None
-    }
-
     pub fn update(&mut self, selected_world_name: Option<String>) {
-        self.update_realtime_dataframe();
-
         if let Some(wf_promise) = &self.world_frame_promise {
             if let Some(wf) = wf_promise.ready() {
                 if let Ok(wf) = wf {
                     log::info!("world frame {}", wf);
                     if let Some(lwf) = self.world.history.last() {
-                        if lwf.frame_index > wf.frame_index { // loop detected
+                        if lwf.frame_index > wf.frame_index {
+                            // loop detected
                             self.world.reset();
                         }
                     }
                     self.world.history.push(wf.clone());
+
+                    let et = self.series_list_req_time.elapsed().as_nanos() as f64;
+                    self.sl_time_history.push_back(et * 1e-9);
+                    if self.sl_time_history.len() > 10 {
+                        self.sl_time_history.pop_front();
+                    }
                 }
                 let selected_world_name = if let Some(name) = selected_world_name {
                     name
                 } else {
                     "slam".to_string()
                 };
-                self.world_frame_promise = Some(self.backend.get_world_frame(selected_world_name, 0.0));
+                self.series_list_req_time = web_time::Instant::now();
+                self.world_frame_promise =
+                    Some(self.backend.get_world_frame(selected_world_name, 0.0));
             }
         }
 

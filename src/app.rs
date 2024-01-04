@@ -49,6 +49,7 @@ impl WorldPlayer {
                             );
                         }
                     });
+                // show world history length and current index
                 let mut history_len = 0;
                 if let Some(selected_name) = &self.selected_world_name {
                     for world_meta in world_list.list.iter() {
@@ -64,6 +65,10 @@ impl WorldPlayer {
                         wf.frame_index, history_len
                     ));
                 }
+                // controller buttons
+                if ui.button("Previous Frame").clicked() {}
+                if ui.button("Play").clicked() {}
+                if ui.button("Next Frame").clicked() {}
             }
         });
     }
