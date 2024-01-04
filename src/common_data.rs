@@ -22,7 +22,7 @@ pub struct CommonData {
 
     #[serde(skip)]
     pub world_frame_promise: Option<Promise<Result<h_analyzer_data::WorldFrame, tonic::Status>>>,
-    pub latest_world_frame: Option<h_analyzer_data::WorldFrame>,
+    pub world: h_analyzer_data::World,
 
     pub realtime_dataframes: HashMap<String, DataFrame>,
     #[serde(skip)]
@@ -71,7 +71,7 @@ impl Default for CommonData {
 
             world_list_promise: Some(wl_promise),
             world_frame_promise: Some(w_promise),
-            latest_world_frame: None,
+            world: h_analyzer_data::World::new(),
 
             realtime_dataframes: HashMap::new(),
             realtime_promises: HashMap::new(),
@@ -220,7 +220,12 @@ impl CommonData {
             if let Some(wf) = wf_promise.ready() {
                 if let Ok(wf) = wf {
                     log::info!("world frame {}", wf);
-                    self.latest_world_frame = Some(wf.clone());
+                    if let Some(lwf) = self.world.history.last() {
+                        if lwf.frame_index > wf.frame_index { // loop detected
+                            self.world.reset();
+                        }
+                    }
+                    self.world.history.push(wf.clone());
                 }
                 let selected_world_name = if let Some(name) = selected_world_name {
                     name

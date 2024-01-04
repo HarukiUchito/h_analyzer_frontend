@@ -100,7 +100,7 @@ impl Plotter2D {
         idx: usize,
         info: &mut SeriesInfo,
         ui: &mut egui::Ui,
-        world_frame_opt: &Option<WorldFrame>,
+        world_frame_opt: Option<&WorldFrame>,
     ) -> Option<()> {
         if world_frame_opt.is_none() {
             return None;
@@ -301,13 +301,9 @@ impl Plotter2D {
                             });
                         });
                     } else if info.source == SeriesSource::WorldFrame {
+                        let latest_wf = common_data.world.history.last();
                         ui.horizontal(|ui| {
-                            Plotter2D::entity_settings(
-                                idx,
-                                info,
-                                ui,
-                                &common_data.latest_world_frame,
-                            );
+                            Plotter2D::entity_settings(idx, info, ui, latest_wf);
                         });
                     }
 
@@ -372,7 +368,7 @@ impl Plotter2D {
             let mut df_select_iter = self.series_df_selectors.iter();
             for s_info in self.series_infos.iter() {
                 if s_info.source == SeriesSource::WorldFrame {
-                    let worldframe = unwrap_or_continue!(&common_data.latest_world_frame);
+                    let worldframe = unwrap_or_continue!(common_data.world.history.last());
                     let entity_name = unwrap_or_continue!(s_info.entity_name.clone());
                     let entity = unwrap_or_continue!(worldframe.entity_map.get(&entity_name));
                     let elem_id = unwrap_or_continue!(s_info.entity_elem_id.clone());
@@ -429,15 +425,42 @@ impl Plotter2D {
                                         .collect();
                                     let arrows = egui_plot::Arrows::new(xys.clone(), xys2);
                                     plot_ui.arrows(arrows);
-
-                                    plot_ui.points(
-                                        egui_plot::Points::new(xys)
-                                            .radius(1.0)
-                                            .filled(false)
-                                            .name(&s_info.title),
-                                    );
                                 }
                             }
+                            let vv: Vec<(f64, f64)> = common_data
+                                .world
+                                .history
+                                .iter()
+                                .map(|wf| -> Option<(f64, f64)> {
+                                    let est = wf
+                                        .entity_map
+                                        .get(&entity_name)?
+                                        .estimate_map
+                                        .get(&elem_id)?;
+                                    match est {
+                                        h_analyzer_data::Estimate::Pose2D(pose) => {
+                                            return Some((pose.position.x, pose.position.y));
+                                        }
+                                        _ => {}
+                                    }
+                                    None
+                                })
+                                .collect::<Vec<Option<(f64, f64)>>>()
+                                .into_iter()
+                                .flatten()
+                                .collect();
+                            let (xs, ys): (Vec<f64>, Vec<f64>) = vv.into_iter().unzip();
+                            let xys: Vec<[f64; 2]> =
+                                (0..xs.len()).map(|i| [xs[i], ys[i]]).collect();
+                            let line_obj = egui_plot::Line::new(xys.clone());
+                            plot_ui.line(line_obj);
+                            plot_ui.points(
+                                egui_plot::Points::new(xys)
+                                    .radius(5.0)
+                                    .filled(false)
+                                    .shape(egui_plot::MarkerShape::Diamond)
+                                    .name(&"trj".to_string()),
+                            );
                         }
                         None => {}
                     }

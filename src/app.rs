@@ -57,7 +57,8 @@ impl WorldPlayer {
                         }
                     }
                 }
-                if let Some(wf) = &common_data.latest_world_frame {
+                let wf = common_data.world.history.last();
+                if let Some(wf) = wf {
                     ui.label(format!(
                         "current frame : {} / {}",
                         wf.frame_index, history_len
