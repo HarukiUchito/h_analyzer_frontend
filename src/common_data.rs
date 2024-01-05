@@ -23,7 +23,11 @@ pub struct CommonData {
 
     #[serde(skip)]
     pub world_frame_promise: Option<Promise<Result<h_analyzer_data::WorldFrame, tonic::Status>>>,
+    #[serde(skip)]
     pub world: h_analyzer_data::World,
+    #[serde(skip)]
+    pub world_name: String,
+    pub world_playing: bool,
 
     #[serde(skip)]
     series_list_req_time: web_time::Instant,
@@ -53,7 +57,6 @@ impl Default for CommonData {
         let init_df_list_promise = backend.request_initial_df_list();
         let fs_list_promise = backend.request_list(path.clone());
         let d_path_promise = backend.request_default_path();
-        let w_promise = backend.get_world_frame("slam".to_string(), 0.0);
         let wl_promise = backend.get_world_list();
         Self {
             backend: backend,
@@ -62,8 +65,10 @@ impl Default for CommonData {
             default_path: path.clone(),
 
             world_list_promise: Some(wl_promise),
-            world_frame_promise: Some(w_promise),
+            world_frame_promise: None,
             world: h_analyzer_data::World::new(),
+            world_name: "".to_string(),
+            world_playing: true,
 
             series_list_req_time: web_time::Instant::now(),
             sl_time_history: std::collections::VecDeque::new(),
@@ -105,10 +110,47 @@ impl CommonData {
     }
 
     pub fn update(&mut self, selected_world_name: Option<String>) {
+        // world frame update
+        let selected_world_name = if let Some(name) = selected_world_name {
+            name
+        } else {
+            "slam".to_string()
+        };
+        if selected_world_name != self.world_name {
+            self.world.reset();
+        }
+        if self.world_playing {
+            self.world.next();
+        }
+        if self.world_frame_promise.is_none() {
+            let mut w_f_num = 0;
+            if let Some(world_list) = self.get_world_list() {
+                for world_meta in world_list.list.iter() {
+                    let wname = world_meta.id.clone().unwrap().id;
+                    if wname == selected_world_name {
+                        w_f_num = world_meta.total_frame_num;
+                    }
+                }
+            }
+            log::debug!(
+                "total frame num: {}, current: {}",
+                w_f_num,
+                self.world.history.len()
+            );
+            if self.world.history.len() < w_f_num as usize {
+                self.series_list_req_time = web_time::Instant::now();
+                self.world_frame_promise =
+                    Some(self.backend.get_world_frame(
+                        selected_world_name.clone(),
+                        self.world.history.len() as u32,
+                    ));
+                self.world_name = selected_world_name.clone();
+            }
+        }
         if let Some(wf_promise) = &self.world_frame_promise {
             if let Some(wf) = wf_promise.ready() {
                 if let Ok(wf) = wf {
-                    log::info!("world frame {}", wf);
+                    //log::info!("world frame {}", wf);
                     if let Some(lwf) = self.world.history.last() {
                         if lwf.frame_index > wf.frame_index {
                             // loop detected
@@ -123,17 +165,11 @@ impl CommonData {
                         self.sl_time_history.pop_front();
                     }
                 }
-                let selected_world_name = if let Some(name) = selected_world_name {
-                    name
-                } else {
-                    "slam".to_string()
-                };
-                self.series_list_req_time = web_time::Instant::now();
-                self.world_frame_promise =
-                    Some(self.backend.get_world_frame(selected_world_name, 0.0));
+                self.world_frame_promise = None;
             }
         }
 
+        // dataframe list update
         if let Some(init_df_list_promise) = &self.init_df_list_promise {
             if let Some(init_df_list) = init_df_list_promise.ready() {
                 if let Ok(init_df_list) = init_df_list {

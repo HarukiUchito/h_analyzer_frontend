@@ -58,17 +58,21 @@ impl WorldPlayer {
                         }
                     }
                 }
-                let wf = common_data.world.history.last();
-                if let Some(wf) = wf {
-                    ui.label(format!(
-                        "current frame : {} / {}",
-                        wf.frame_index, history_len
-                    ));
-                }
+                ui.label(format!(
+                    "current frame : {} / {}",
+                    common_data.world.current_index, history_len
+                ));
                 // controller buttons
-                if ui.button("Previous Frame").clicked() {}
-                if ui.button("Play").clicked() {}
-                if ui.button("Next Frame").clicked() {}
+                if ui.button("Previous Frame").clicked() {
+                    common_data.world.previous();
+                }
+                let playing = common_data.world_playing;
+                if ui.button(if playing { "Pause" } else { "Play" }).clicked() {
+                    common_data.world_playing = !playing;
+                }
+                if ui.button("Next Frame").clicked() {
+                    common_data.world.next();
+                }
             }
         });
     }

@@ -295,7 +295,10 @@ impl Plotter2D {
                             });
                         });
                     } else if info.source == SeriesSource::WorldFrame {
-                        let latest_wf = common_data.world.history.last();
+                        let latest_wf = common_data
+                            .world
+                            .history
+                            .get(common_data.world.current_index);
                         ui.horizontal(|ui| {
                             Plotter2D::entity_settings(idx, info, ui, latest_wf);
                         });
@@ -362,7 +365,10 @@ impl Plotter2D {
             let mut df_select_iter = self.series_df_selectors.iter();
             for s_info in self.series_infos.iter() {
                 if s_info.source == SeriesSource::WorldFrame {
-                    let worldframe = unwrap_or_continue!(common_data.world.history.last());
+                    let worldframe = unwrap_or_continue!(common_data
+                        .world
+                        .history
+                        .get(common_data.world.current_index));
                     let entity_name = unwrap_or_continue!(s_info.entity_name.clone());
                     let entity = unwrap_or_continue!(worldframe.entity_map.get(&entity_name));
                     let elem_id = unwrap_or_continue!(s_info.entity_elem_id.clone());
@@ -394,7 +400,7 @@ impl Plotter2D {
                             let estimate = unwrap_or_continue!(entity.estimate_map.get(&elem_id));
                             match estimate {
                                 h_analyzer_data::Estimate::Pose2D(pose) => {
-                                    log::info!("pose : {:?}", pose);
+                                    //log::info!("pose : {:?}", pose);
                                     let xs = vec![pose.position.x];
                                     let ys = vec![pose.position.y];
                                     if s_info.track_this {
@@ -425,6 +431,7 @@ impl Plotter2D {
                                 .world
                                 .history
                                 .iter()
+                                .take(common_data.world.current_index + 1)
                                 .map(|wf| -> Option<(f64, f64)> {
                                     let est = wf
                                         .entity_map
@@ -477,7 +484,7 @@ impl Plotter2D {
                     let mut local_df = unwrap_or_continue!(local_df);
 
                     if self.apply_x_limit {
-                        log::info!("{:?}", self.limit_x_range);
+                        //log::info!("{:?}", self.limit_x_range);
                         let rt_col = local_df.column("Relative Time[s]").unwrap();
                         let mask = rt_col.gt(self.limit_x_range.0).unwrap();
                         local_df = local_df.filter(&mask).unwrap();

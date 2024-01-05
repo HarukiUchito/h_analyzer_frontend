@@ -132,7 +132,7 @@ impl BackendTalk {
     pub fn get_world_frame(
         &self,
         world_name: String,
-        unix_timestamp: f64,
+        frame_index: u32,
     ) -> Promise<Result<h_analyzer_data::WorldFrame, tonic::Status>> {
         let base_url = self.server_address.clone();
         Promise::spawn_local(async move {
@@ -143,9 +143,9 @@ impl BackendTalk {
 
             let req = grpc_data_transfer::GetWorldFrameRequest {
                 id: Some(grpc_data_transfer::WorldId { id: world_name }),
-                timestamp: Some(grpc_data_transfer::UnixTimeStamp {
-                    value: unix_timestamp,
-                }),
+                request_type: grpc_data_transfer::WorldFrameRequestType::FrameIndex.into(),
+                frame_index: frame_index,
+                timestamp: Some(grpc_data_transfer::UnixTimeStamp { value: 0.0 }),
             };
             let mut stream = query_client.get_world_frame(req).await?.into_inner();
 
