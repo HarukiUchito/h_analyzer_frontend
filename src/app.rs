@@ -58,10 +58,6 @@ impl WorldPlayer {
                         }
                     }
                 }
-                ui.label(format!(
-                    "current frame : {} / {}",
-                    common_data.world.current_index, history_len
-                ));
                 // controller buttons
                 if ui.button("Previous Frame").clicked() {
                     common_data.world.previous();
@@ -72,6 +68,18 @@ impl WorldPlayer {
                 }
                 if ui.button("Next Frame").clicked() {
                     common_data.world.next();
+                }
+                // world infomation
+                ui.label(format!(
+                    "current frame : {} / {}",
+                    common_data.world.current_index, history_len
+                ));
+                if let Some(wf) = common_data
+                    .world
+                    .history
+                    .get(common_data.world.current_index)
+                {
+                    ui.label(format!("current time: {}", wf.timestamp));
                 }
             }
         });
