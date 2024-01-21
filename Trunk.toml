@@ -1,1 +1,5 @@
 [build]
+
+[serve]
+# The address to serve on.
+address = "0.0.0.0"
