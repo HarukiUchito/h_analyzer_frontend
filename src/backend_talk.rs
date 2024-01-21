@@ -13,7 +13,7 @@ use tonic_web_wasm_client::Client;
 impl BackendTalk {
     pub fn default() -> Self {
         BackendTalk {
-            server_address: "http://192.168.64.2:50051".to_string(),
+            server_address: "http://localhost:50051".to_string(),
         }
     }
 
@@ -124,7 +124,7 @@ impl BackendTalk {
                     cvec.push(v);
                 }
             }
-            let df = bincode::deserialize_from(cvec.clone().as_slice()).unwrap();
+            let df = bincode::deserialize_from(cvec.clone().as_slice()).unwrap_or_default();
             Ok(df)
         })
     }
