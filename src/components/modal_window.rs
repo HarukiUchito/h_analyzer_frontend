@@ -18,6 +18,7 @@ pub enum LoadState {
     LOADING,
     LOADED,
     FAILED,
+    CANCELED,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Hash, Clone)]
@@ -66,11 +67,13 @@ pub fn get_filename(fullpath: &str) -> String {
 
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct ModalWindow {}
+pub struct ModalWindow {
+    done: bool,
+}
 
 impl Default for ModalWindow {
     fn default() -> Self {
-        Self {}
+        Self { done: false }
     }
 }
 
@@ -112,6 +115,10 @@ impl ModalWindow {
                 }
                 if ui.button("Load File").clicked() {
                     df_info.load_state = LoadState::LoadNow;
+                }
+                if ui.button("Preview").clicked() {}
+                if ui.button("Cancel").clicked() {
+                    df_info.load_state = LoadState::CANCELED;
                 }
             });
     }

@@ -116,6 +116,7 @@ impl Explorer {
                             ui.label(format!("shape {:?}", df.shape()));
                         }
                     });
+                    ui.label(df_info.filepath.to_string());
                 }
             }
         }

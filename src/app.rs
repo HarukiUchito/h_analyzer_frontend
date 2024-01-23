@@ -1,6 +1,7 @@
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
 use crate::common_data;
+use crate::components::modal_window::ModalWindow;
 use crate::components::{dataframe_table, explorer, modal_window, plotter_2d};
 use eframe::egui::{self, FontData};
 
@@ -95,6 +96,9 @@ pub struct TemplateApp {
     world_player: WorldPlayer,
 
     #[serde(skip)]
+    modal_window: ModalWindow,
+
+    #[serde(skip)]
     behavior: TreeBehavior,
 
     #[serde(skip)]
@@ -150,6 +154,7 @@ impl Default for TemplateApp {
         Self {
             tree: tree,
             world_player: WorldPlayer::default(),
+            modal_window: ModalWindow::default(),
             behavior: TreeBehavior::new(common_data_arc.clone()),
             last_tree_debug: Default::default(),
             explorer: explorer::Explorer::default(),
@@ -250,7 +255,7 @@ impl eframe::App for TemplateApp {
             //
             for (_, (df_info, _)) in cdata.dataframes.iter_mut() {
                 if df_info.load_state == modal_window::LoadState::OpenModalWindow {
-                    modal_window::ModalWindow::default().show(ctx, df_info);
+                    self.modal_window.show(ctx, df_info);
                     opening_modal_window = true;
                 }
             }
