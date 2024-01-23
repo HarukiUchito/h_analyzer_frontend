@@ -990,6 +990,8 @@ dependencies = [
  "prost",
  "serde",
  "serde_derive",
+ "strum",
+ "strum_macros",
  "tokio-stream",
  "tonic",
  "tonic-web-wasm-client",

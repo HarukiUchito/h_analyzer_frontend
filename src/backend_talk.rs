@@ -13,7 +13,7 @@ use tonic_web_wasm_client::Client;
 impl BackendTalk {
     pub fn default() -> Self {
         BackendTalk {
-            server_address: "http://localhost:50051".to_string(),
+            server_address: "http://192.168.1.8:50051".to_string(),
         }
     }
 

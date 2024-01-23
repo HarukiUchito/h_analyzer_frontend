@@ -9,12 +9,15 @@ pub enum DataFrameType {
     KITTI,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
+#[derive(
+    strum_macros::Display, serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy,
+)]
 pub enum LoadState {
     OpenModalWindow,
     LoadNow,
     LOADING,
     LOADED,
+    FAILED,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Hash, Clone)]

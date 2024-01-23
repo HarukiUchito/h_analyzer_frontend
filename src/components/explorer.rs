@@ -109,10 +109,13 @@ impl Explorer {
                 for (_, (df_info, df_opt)) in common_data.dataframes.iter() {
                     let mut checkd = false;
                     let name = get_filename(&df_info.filepath.as_str());
-                    ui.checkbox(&mut checkd, name.clone());
-                    if let Some(df) = df_opt {
-                        ui.label(format!("shape {:?}", df.shape()));
-                    }
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut checkd, name.clone());
+                        ui.label(df_info.load_state.to_string());
+                        if let Some(df) = df_opt {
+                            ui.label(format!("shape {:?}", df.shape()));
+                        }
+                    });
                 }
             }
         }

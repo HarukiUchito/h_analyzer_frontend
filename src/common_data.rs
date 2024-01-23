@@ -209,23 +209,27 @@ impl CommonData {
             }
         }
 
-        let df = (|| {
+        let recieved = (|| {
             if let Some((idx, result)) = &self.hello_promise {
-                if let Some(result) = result.ready() {
-                    if let Ok(result) = result {
-                        if let Some(entry) = self.dataframes.get_mut(&idx.to_string()) {
-                            log::info!("df stored {:?}", result.shape());
-                            log::info!("{:?}", result);
+                if let Some(entry) = self.dataframes.get_mut(&idx.to_string()) {
+                    if let Some(result) = result.ready() {
+                        log::info!("done");
+                        if let Ok(result) = result {
+                            //log::info!("df stored {:?}", result.shape());
+                            //log::info!("{:?}", result);
+                            entry.0.load_state = LoadState::LOADED;
                             entry.1 = Some(result.clone());
-                            log::info!("{:?}", entry.1.clone().unwrap_or_default());
+                            //log::info!("{:?}", entry.1.clone().unwrap_or_default());
+                        } else {
+                            entry.0.load_state = LoadState::FAILED;
                         }
-                        return result.clone();
+                        return true;
                     }
                 }
             }
-            DataFrame::default()
+            false
         })();
-        if !df.is_empty() {
+        if recieved {
             self.hello_promise = None;
         }
 
@@ -237,6 +241,7 @@ impl CommonData {
                         .load_df_request(df_info.filepath.clone(), df_info.df_type),
                 ));
                 df_info.load_state = LoadState::LOADING;
+                log::info!("evoke {}", df_info.filepath);
             }
         }
     }
