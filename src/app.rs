@@ -130,7 +130,7 @@ impl Default for TemplateApp {
             let mut cells = Vec::new();
             cells.push(tiles.insert_pane(gen_view(PaneType::None(0))));
             cells.push(tiles.insert_pane(gen_view(PaneType::Table(
-                dataframe_table::DataFrameTable::default(),
+                dataframe_table::DataFrameTablePane::default(),
             ))));
             cells.push(
                 tiles.insert_pane(gen_view(PaneType::PerformancePlot(PerformancePlot::new()))),
@@ -141,7 +141,7 @@ impl Default for TemplateApp {
             tiles.insert_grid_tile(cells)
         });
         tabs.push(tiles.insert_pane(gen_view(PaneType::Table(
-            dataframe_table::DataFrameTable::default(),
+            dataframe_table::DataFrameTablePane::default(),
         ))));
         tabs.push(tiles.insert_pane(gen_view(PaneType::Plotter2D(
             plotter_2d::Plotter2D::default(),
@@ -254,9 +254,10 @@ impl eframe::App for TemplateApp {
             // View update
             //
             if let Some(key) = &cdata.modal_window_df_key.clone() {
-                let (df_info, _) = cdata.dataframes.get_mut(key).unwrap();
+                let (df_info, loaded) = cdata.dataframes.get_mut(key).unwrap();
                 let mut still_open = false;
-                self.modal_window.show(ctx, df_info, &mut still_open);
+                self.modal_window
+                    .show(ctx, df_info, loaded, &mut still_open);
                 if !still_open {
                     cdata.modal_window_df_key = None;
                 }
@@ -325,7 +326,7 @@ impl eframe::App for TemplateApp {
 #[derive(serde::Deserialize, serde::Serialize)]
 enum PaneType {
     Plotter2D(plotter_2d::Plotter2D),
-    Table(dataframe_table::DataFrameTable),
+    Table(dataframe_table::DataFrameTablePane),
     PerformancePlot(PerformancePlot),
     None(i32),
 }

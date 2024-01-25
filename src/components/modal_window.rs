@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 
+use super::dataframe_table;
 use eframe::egui::{self};
-
-use crate::common_data;
+use polars::prelude::*;
 
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
 pub enum DataFrameType {
@@ -84,6 +84,7 @@ impl ModalWindow {
         &mut self,
         ctx: &egui::Context,
         df_info: &mut DataFrameInfo,
+        df_opt: &Option<DataFrame>,
         still_open: &mut bool,
     ) {
         *still_open = true;
@@ -131,6 +132,9 @@ impl ModalWindow {
                 if ui.button("Cancel").clicked() {
                     df_info.load_state = LoadState::CANCELED;
                     *still_open = false;
+                }
+                if let Some(df) = df_opt {
+                    dataframe_table::show_dataframe_table(ui, df);
                 }
             });
     }
