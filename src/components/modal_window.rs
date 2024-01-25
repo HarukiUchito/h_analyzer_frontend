@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 
 use eframe::egui::{self};
 
+use crate::common_data;
+
 #[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
 pub enum DataFrameType {
     CommaSep,
@@ -78,7 +80,13 @@ impl Default for ModalWindow {
 }
 
 impl ModalWindow {
-    pub fn show(&mut self, ctx: &egui::Context, df_info: &mut DataFrameInfo) {
+    pub fn show(
+        &mut self,
+        ctx: &egui::Context,
+        df_info: &mut DataFrameInfo,
+        still_open: &mut bool,
+    ) {
+        *still_open = true;
         egui::Window::new("modal")
             //                .open(&mut self.modal_window_open)
             .anchor(egui::Align2::CENTER_TOP, egui::Vec2::new(0.0, 100.0))
@@ -115,10 +123,14 @@ impl ModalWindow {
                 }
                 if ui.button("Load File").clicked() {
                     df_info.load_state = LoadState::LoadNow;
+                    *still_open = false;
                 }
-                if ui.button("Preview").clicked() {}
+                if ui.button("Preview").clicked() {
+                    df_info.load_state = LoadState::LoadNow;
+                }
                 if ui.button("Cancel").clicked() {
                     df_info.load_state = LoadState::CANCELED;
+                    *still_open = false;
                 }
             });
     }

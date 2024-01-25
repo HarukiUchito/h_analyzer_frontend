@@ -89,9 +89,11 @@ impl Explorer {
                                 .join(filename);
                             let key = common_data.dataframes.len().to_string().clone();
                             let fullpath = nfp.to_string_lossy().to_string();
-                            common_data
-                                .dataframes
-                                .insert(key, (modal_window::DataFrameInfo::new(fullpath), None));
+                            common_data.dataframes.insert(
+                                key.clone(),
+                                (modal_window::DataFrameInfo::new(fullpath), None),
+                            );
+                            common_data.modal_window_df_key = Some(key);
                         }
                     }
 

@@ -13,6 +13,7 @@ pub struct CommonData {
     #[serde(skip)]
     pub backend: backend_talk::BackendTalk,
 
+    pub modal_window_df_key: Option<String>,
     pub dataframes: HashMap<String, (modal_window::DataFrameInfo, Option<DataFrame>)>,
     pub current_path: String,
     pub default_path: String,
@@ -60,6 +61,7 @@ impl Default for CommonData {
         let wl_promise = backend.get_world_list();
         Self {
             backend: backend,
+            modal_window_df_key: None,
             dataframes: HashMap::new(),
             current_path: path.clone(),
             default_path: path.clone(),

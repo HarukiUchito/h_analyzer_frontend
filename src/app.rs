@@ -253,11 +253,14 @@ impl eframe::App for TemplateApp {
             //
             // View update
             //
-            for (_, (df_info, _)) in cdata.dataframes.iter_mut() {
-                if df_info.load_state == modal_window::LoadState::OpenModalWindow {
-                    self.modal_window.show(ctx, df_info);
-                    opening_modal_window = true;
+            if let Some(key) = &cdata.modal_window_df_key.clone() {
+                let (df_info, _) = cdata.dataframes.get_mut(key).unwrap();
+                let mut still_open = false;
+                self.modal_window.show(ctx, df_info, &mut still_open);
+                if !still_open {
+                    cdata.modal_window_df_key = None;
                 }
+                opening_modal_window = true;
             }
         }
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
