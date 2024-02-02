@@ -98,7 +98,7 @@ impl BackendTalk {
     pub fn load_df_request(
         &self,
         filepath: String,
-        df_type: modal_window::DataFrameType,
+        load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption,
     ) -> Promise<Result<DataFrame, tonic::Status>> {
         let base_url = self.server_address.clone();
         Promise::spawn_local(async move {
@@ -106,15 +106,9 @@ impl BackendTalk {
                 Client::new(base_url.to_string()),
             );
 
-            let filetype = match df_type {
-                modal_window::DataFrameType::CommaSep => grpc_fs::DataFrameType::CommaSep,
-                modal_window::DataFrameType::NDEV => grpc_fs::DataFrameType::Ndev,
-                modal_window::DataFrameType::KITTI => grpc_fs::DataFrameType::Kitti,
-            };
-
             let req = grpc_fs::FileLoadRequest {
                 filename: filepath,
-                filetype: filetype.into(),
+                load_option: Some(load_option),
             };
             let mut stream = query_client.load_data_frame(req).await?.into_inner();
 

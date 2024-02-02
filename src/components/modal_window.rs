@@ -1,15 +1,6 @@
-use std::cmp::Ordering;
-
 use super::dataframe_table;
 use eframe::egui::{self};
 use polars::prelude::*;
-
-#[derive(serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy)]
-pub enum DataFrameType {
-    CommaSep,
-    NDEV,
-    KITTI,
-}
 
 #[derive(
     strum_macros::Display, serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy,
@@ -23,10 +14,10 @@ pub enum LoadState {
     CANCELED,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Hash, Clone)]
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
 pub struct DataFrameInfo {
     pub filepath: String,
-    pub df_type: DataFrameType,
+    pub load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption,
     pub load_state: LoadState,
 }
 
@@ -34,32 +25,16 @@ impl DataFrameInfo {
     pub fn new(fpath: String) -> DataFrameInfo {
         DataFrameInfo {
             filepath: fpath,
-            df_type: DataFrameType::NDEV,
+            load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption {
+                has_header: false,
+                skip_row_num_before_header: 0,
+                skip_row_num_after_header: 0,
+                delimiter: ",".to_string(),
+            },
             load_state: LoadState::OpenModalWindow,
         }
     }
 }
-
-impl Ord for DataFrameInfo {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.filepath.cmp(&other.filepath)
-    }
-}
-
-impl PartialOrd for DataFrameInfo {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for DataFrameInfo {
-    fn eq(&self, other: &Self) -> bool {
-        (self.filepath.clone(), self.df_type, self.load_state)
-            == (other.filepath.clone(), other.df_type, other.load_state)
-    }
-}
-
-impl Eq for DataFrameInfo {}
 
 pub fn get_filename(fullpath: &str) -> String {
     let pathv = std::path::Path::new(fullpath);
@@ -94,34 +69,20 @@ impl ModalWindow {
             .show(ctx, |ui| {
                 let name = get_filename(df_info.filepath.as_str());
                 ui.label(name.clone());
-                ui.label("dataframe type");
-                if ui
-                    .add(egui::RadioButton::new(
-                        df_info.df_type == DataFrameType::CommaSep,
-                        "COMMA_SEP",
-                    ))
-                    .clicked()
-                {
-                    df_info.df_type = DataFrameType::CommaSep;
-                }
-                if ui
-                    .add(egui::RadioButton::new(
-                        df_info.df_type == DataFrameType::NDEV,
-                        "NDEV",
-                    ))
-                    .clicked()
-                {
-                    df_info.df_type = DataFrameType::NDEV;
-                }
-                if ui
-                    .add(egui::RadioButton::new(
-                        df_info.df_type == DataFrameType::KITTI,
-                        "KITTI",
-                    ))
-                    .clicked()
-                {
-                    df_info.df_type = DataFrameType::KITTI;
-                }
+                ui.label("Load options");
+                ui.horizontal(|ui| {
+                    ui.label("numer of rows to skip before header");
+                    ui.add(egui::DragValue::new(
+                        &mut df_info.load_option.skip_row_num_before_header,
+                    ));
+                });
+                ui.checkbox(&mut df_info.load_option.has_header, "has_header");
+                ui.horizontal(|ui| {
+                    ui.label("numer of rows to skip after header");
+                    ui.add(egui::DragValue::new(
+                        &mut df_info.load_option.skip_row_num_after_header,
+                    ));
+                });
                 if ui.button("Load File").clicked() {
                     df_info.load_state = LoadState::LoadNow;
                     *still_open = false;

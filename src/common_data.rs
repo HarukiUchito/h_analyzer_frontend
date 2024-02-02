@@ -105,7 +105,7 @@ impl CommonData {
         for (_, (df_info, _)) in self.dataframes.iter() {
             dfi_list.push(grpc_fs::DataFrameInfo {
                 df_path: df_info.filepath.clone(),
-                df_type: df_info.df_type as i32,
+                load_option: Some(df_info.load_option.clone()),
             });
         }
         self.save_df_list_promise = Some(self.backend.save_df_list(dfi_list));
@@ -185,12 +185,7 @@ impl CommonData {
 
         if let Some(df_to_be_loaded) = self.df_to_be_loaded_queue.pop_front() {
             let mut df_info = modal_window::DataFrameInfo::new(df_to_be_loaded.df_path);
-            df_info.df_type = match df_to_be_loaded.df_type {
-                0 => modal_window::DataFrameType::CommaSep,
-                1 => modal_window::DataFrameType::NDEV,
-                2 => modal_window::DataFrameType::KITTI,
-                _ => unimplemented!(),
-            };
+            df_info.load_option = df_to_be_loaded.load_option.unwrap();
             df_info.load_state = modal_window::LoadState::LoadNow;
             log::info!("enqueue {} {}", self.dataframes.len(), df_info.filepath);
             self.dataframes
@@ -247,7 +242,7 @@ impl CommonData {
                 self.hello_promise = Some((
                     idx.to_string(),
                     self.backend
-                        .load_df_request(df_info.filepath.clone(), df_info.df_type),
+                        .load_df_request(df_info.filepath.clone(), df_info.load_option.clone()),
                 ));
                 df_info.load_state = LoadState::LOADING;
                 log::info!("evoke {} {}", idx, df_info.filepath);

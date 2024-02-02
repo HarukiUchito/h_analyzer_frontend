@@ -1560,7 +1560,7 @@ dependencies = [
 [[package]]
 name = "h_analyzer_data"
 version = "0.1.0"
-source = "git+https://github.com/HarukiUchito/h_analyzer_grpc.git#208fa09f024928240e7cd490a30360e2fa6208c9"
+source = "git+https://github.com/HarukiUchito/h_analyzer_grpc.git#ec99a260ee8fd59fbdaed85424f20fcc2880688c"
 dependencies = [
  "prost",
  "serde",
