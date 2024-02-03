@@ -67,13 +67,18 @@ impl Explorer {
                     let mut fsvec = fs_list.files.clone();
                     fsvec.sort();
                     let mut b1 = false;
-                    let dirname = "..";
-                    if ui.checkbox(&mut b1, dirname).double_clicked() {
-                        let nfp =
-                            std::path::Path::new(common_data.current_path.as_str()).join(dirname);
-                        common_data.current_path = nfp.to_string_lossy().into_owned();
-                        update_list = true;
+
+                    let nfp = std::path::Path::new(common_data.current_path.as_str());
+                    let anc = nfp.clone();
+                    let mut anc = anc.ancestors();
+                    anc.next()?;
+                    if let Some(anc_path) = anc.next() {
+                        if ui.checkbox(&mut b1, "..").double_clicked() {
+                            common_data.current_path = anc_path.to_string_lossy().into_owned();
+                            update_list = true;
+                        }
                     }
+
                     for dirname in fs_list.directories.iter() {
                         if ui.checkbox(&mut b1, dirname).double_clicked() {
                             let nfp = std::path::Path::new(common_data.current_path.as_str())
