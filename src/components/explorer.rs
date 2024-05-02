@@ -14,12 +14,14 @@ enum ExplorerTab {
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Explorer {
     explorer_tab: ExplorerTab,
+    checked_map: std::collections::HashMap<String, bool>,
 }
 
 impl Default for Explorer {
     fn default() -> Self {
         Self {
             explorer_tab: ExplorerTab::FILESYSTEM,
+            checked_map: std::collections::HashMap::new(),
         }
     }
 }
@@ -57,22 +59,30 @@ impl Explorer {
 
                 egui::ScrollArea::both().show(ui, |ui| -> Option<()> {
                     let mut update_list = false;
-                    let fs_list = common_data
-                        .fs_list_promise
-                        .as_ref()?
-                        .ready()?
-                        .as_ref()
-                        .ok()?
-                        .clone();
+                    let promise = common_data.fs_list_promise.as_ref()?;
+                    if promise.ready().is_none() && self.checked_map.len() != 0 {
+                        log::info!("reset map!");
+                        self.checked_map.clear();
+                    }
+                    let fs_list = promise.ready()?.as_ref().ok()?.clone();
+                    if self.checked_map.len() == 0 {
+                        for dirname in fs_list.directories.iter() {
+                            self.checked_map.insert(dirname.clone(), false);
+                        }
+                        for filename in fs_list.files.iter() {
+                            self.checked_map.insert(filename.clone(), false);
+                        }
+                    }
+
                     let mut fsvec = fs_list.files.clone();
                     fsvec.sort();
-                    let mut b1 = false;
 
                     let nfp = std::path::Path::new(common_data.current_path.as_str());
                     let anc = nfp.clone();
                     let mut anc = anc.ancestors();
                     anc.next()?;
                     if let Some(anc_path) = anc.next() {
+                        let mut b1 = false;
                         if ui.checkbox(&mut b1, "..").double_clicked() {
                             common_data.current_path = anc_path.to_string_lossy().into_owned();
                             update_list = true;
@@ -80,7 +90,10 @@ impl Explorer {
                     }
 
                     for dirname in fs_list.directories.iter() {
-                        if ui.checkbox(&mut b1, dirname).double_clicked() {
+                        if ui
+                            .checkbox(&mut self.checked_map.get_mut(dirname).unwrap(), dirname)
+                            .double_clicked()
+                        {
                             let nfp = std::path::Path::new(common_data.current_path.as_str())
                                 .join(dirname);
                             common_data.current_path = nfp.to_string_lossy().into_owned();
@@ -88,8 +101,10 @@ impl Explorer {
                         }
                     }
                     for filename in fsvec.iter() {
-                        let mut b1 = false;
-                        if ui.checkbox(&mut b1, filename).double_clicked() {
+                        if ui
+                            .checkbox(&mut self.checked_map.get_mut(filename).unwrap(), filename)
+                            .double_clicked()
+                        {
                             let nfp = std::path::Path::new(common_data.current_path.as_str())
                                 .join(filename);
                             let key = common_data.dataframes.len().to_string().clone();
@@ -111,6 +126,8 @@ impl Explorer {
                     }
                     None
                 });
+                ui.separator();
+                ui.button("Load as ROSBAG2");
             }
             ExplorerTab::DATAFRAME => {
                 for (_, (df_info, df_opt)) in common_data.dataframes.iter() {

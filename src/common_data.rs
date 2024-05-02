@@ -46,7 +46,7 @@ pub struct CommonData {
     pub fs_list_promise:
         Option<Promise<Result<backend_talk::grpc_fs::ListResponse, tonic::Status>>>,
     #[serde(skip)]
-    pub hello_promise: Option<(String, Promise<Result<DataFrame, tonic::Status>>)>,
+    pub load_df_promise: Option<(String, Promise<Result<DataFrame, tonic::Status>>)>,
     #[serde(skip)]
     pub d_path_promise: Option<Promise<Result<backend_talk::grpc_fs::PathMessage, tonic::Status>>>,
 }
@@ -79,7 +79,7 @@ impl Default for CommonData {
             df_to_be_loaded_queue: VecDeque::new(),
             save_df_list_promise: None,
             fs_list_promise: Some(fs_list_promise),
-            hello_promise: None,
+            load_df_promise: None,
             d_path_promise: Some(d_path_promise),
         }
     }
@@ -208,7 +208,7 @@ impl CommonData {
         }
 
         let recieved = (|| {
-            if let Some((idx, result)) = &self.hello_promise {
+            if let Some((idx, result)) = &self.load_df_promise {
                 if let Some(entry) = self.dataframes.get_mut(&idx.to_string()) {
                     if let Some(result) = result.ready() {
                         log::info!("done");
@@ -230,7 +230,7 @@ impl CommonData {
             false
         })();
         if recieved {
-            self.hello_promise = None;
+            self.load_df_promise = None;
         }
 
         let mut remove_list = Vec::new();
@@ -238,8 +238,8 @@ impl CommonData {
             if df_info.load_state == LoadState::CANCELED {
                 remove_list.push(idx.clone());
             }
-            if df_info.load_state == LoadState::LoadNow && self.hello_promise.is_none() {
-                self.hello_promise = Some((
+            if df_info.load_state == LoadState::LoadNow && self.load_df_promise.is_none() {
+                self.load_df_promise = Some((
                     idx.to_string(),
                     self.backend
                         .load_df_request(df_info.filepath.clone(), df_info.load_option.clone()),

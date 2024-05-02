@@ -399,6 +399,7 @@ impl Plotter2D {
                         Some(EntityVizTarget::Estimate) => {
                             let estimate = unwrap_or_continue!(entity.estimate_map.get(&elem_id));
                             match estimate {
+                                h_analyzer_data::Estimate::Pose2DWithCovariance(pose) => {}
                                 h_analyzer_data::Estimate::Pose2D(pose) => {
                                     //log::info!("pose : {:?}", pose);
                                     let xs = vec![pose.position.x];

@@ -26,6 +26,7 @@ impl DataFrameInfo {
         DataFrameInfo {
             filepath: fpath,
             load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption {
+                source_type: h_analyzer_data::grpc_fs::DataFrameSourceType::Csv.into(),
                 has_header: false,
                 skip_row_num_before_header: 0,
                 skip_row_num_after_header: 0,
@@ -63,40 +64,79 @@ impl ModalWindow {
         still_open: &mut bool,
     ) {
         *still_open = true;
-        egui::Window::new("modal")
+        egui::Window::new("File Load Options")
             //                .open(&mut self.modal_window_open)
             .anchor(egui::Align2::CENTER_TOP, egui::Vec2::new(0.0, 100.0))
             .show(ctx, |ui| {
-                let name = get_filename(df_info.filepath.as_str());
-                ui.label(name.clone());
-                ui.label("Load options");
-                ui.horizontal(|ui| {
-                    ui.label("numer of rows to skip before header");
-                    ui.add(egui::DragValue::new(
-                        &mut df_info.load_option.skip_row_num_before_header,
-                    ));
+                egui::Grid::new("settings").show(ui, |ui| {
+                    let name = get_filename(df_info.filepath.as_str());
+                    ui.horizontal(|ui| {
+                        ui.label("Filename:");
+                        ui.label(name.clone());
+                    });
+                    ui.end_row();
+
+                    ui.horizontal(|ui| {
+                        ui.label("Data Source Type:");
+                        ui.selectable_value(
+                            &mut df_info.load_option.source_type,
+                            h_analyzer_data::grpc_fs::DataFrameSourceType::Csv as i32,
+                            "CSV",
+                        );
+                        ui.selectable_value(
+                            &mut df_info.load_option.source_type,
+                            h_analyzer_data::grpc_fs::DataFrameSourceType::Rosbag2 as i32,
+                            "ROSBAG2",
+                        );
+                    });
+                    ui.end_row();
+
+                    if df_info.load_option.source_type
+                        == h_analyzer_data::grpc_fs::DataFrameSourceType::Csv as i32
+                    {
+                        ui.horizontal(|ui| {
+                            ui.label("Load options:");
+                            ui.horizontal(|ui| {
+                                ui.label("numer of rows to skip before header");
+                                ui.add(egui::DragValue::new(
+                                    &mut df_info.load_option.skip_row_num_before_header,
+                                ));
+                            });
+                        });
+                        ui.end_row();
+
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut df_info.load_option.has_header, "has_header");
+                        });
+                        ui.end_row();
+
+                        ui.horizontal(|ui| {
+                            ui.label("numer of rows to skip after header");
+                            ui.add(egui::DragValue::new(
+                                &mut df_info.load_option.skip_row_num_after_header,
+                            ));
+                        });
+                        ui.end_row();
+                    }
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Load File").clicked() {
+                            df_info.load_state = LoadState::LoadNow;
+                            *still_open = false;
+                        }
+                        if ui.button("Preview").clicked() {
+                            df_info.load_state = LoadState::LoadNow;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            df_info.load_state = LoadState::CANCELED;
+                            *still_open = false;
+                        }
+                    });
+                    ui.end_row();
+                    if let Some(df) = df_opt {
+                        dataframe_table::show_dataframe_table(ui, df);
+                    }
                 });
-                ui.checkbox(&mut df_info.load_option.has_header, "has_header");
-                ui.horizontal(|ui| {
-                    ui.label("numer of rows to skip after header");
-                    ui.add(egui::DragValue::new(
-                        &mut df_info.load_option.skip_row_num_after_header,
-                    ));
-                });
-                if ui.button("Load File").clicked() {
-                    df_info.load_state = LoadState::LoadNow;
-                    *still_open = false;
-                }
-                if ui.button("Preview").clicked() {
-                    df_info.load_state = LoadState::LoadNow;
-                }
-                if ui.button("Cancel").clicked() {
-                    df_info.load_state = LoadState::CANCELED;
-                    *still_open = false;
-                }
-                if let Some(df) = df_opt {
-                    dataframe_table::show_dataframe_table(ui, df);
-                }
             });
     }
 }
