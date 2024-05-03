@@ -130,18 +130,47 @@ impl Explorer {
                 ui.button("Load as ROSBAG2");
             }
             ExplorerTab::DATAFRAME => {
-                for (_, (df_info, df_opt)) in common_data.dataframes.iter() {
-                    let mut checkd = false;
-                    let name = get_filename(&df_info.filepath.as_str());
-                    ui.horizontal(|ui| {
-                        ui.checkbox(&mut checkd, name.clone());
-                        ui.label(df_info.load_state.to_string());
-                        if let Some(df) = df_opt {
-                            ui.label(format!("shape {:?}", df.shape()));
-                        }
-                    });
-                    ui.label(df_info.filepath.to_string());
-                }
+                egui::ScrollArea::both().show(ui, |ui| {
+                    for (id, df_info) in common_data.latest_df_info_map.iter() {
+                        ui.collapsing(get_filename(&df_info.df_path), |ui| {
+                            egui::Grid::new("colors")
+                                .num_columns(2)
+                                .spacing([12.0, 8.0])
+                                .striped(true)
+                                .show(ui, |ui| {
+                                    ui.label("ID");
+                                    ui.label(format!("{}", id));
+                                    ui.end_row();
+
+                                    ui.label("FilePath");
+                                    ui.label(format!("{}", df_info.df_path));
+                                    ui.end_row();
+
+                                    ui.label("Availability");
+                                    ui.label(format!(
+                                        "{}",
+                                        common_data
+                                            .required_dataframes
+                                            .get(&(df_info.clone().id.unwrap().id as usize))
+                                            .is_some()
+                                    ));
+                                    ui.end_row();
+                                });
+                        });
+                    }
+                    for (_, (df_info, df_opt)) in common_data.dataframes.iter() {
+                        let mut checkd = false;
+                        let name = get_filename(&df_info.filepath.as_str());
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut checkd, name.clone());
+                            ui.label(df_info.load_state.to_string());
+                            if let Some(df) = df_opt {
+                                ui.label(format!("shape {:?}", df.shape()));
+                            }
+                        });
+                        ui.label(df_info.filepath.to_string());
+                    }
+                });
             }
         }
     }

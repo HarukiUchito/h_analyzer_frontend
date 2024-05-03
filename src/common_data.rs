@@ -5,7 +5,6 @@ use crate::components::modal_window::{self, LoadState};
 use crate::unwrap_or_continue;
 use polars::prelude::*;
 use poll_promise::Promise;
-use std::collections::HashMap;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -13,8 +12,18 @@ pub struct CommonData {
     #[serde(skip)]
     pub backend: backend_talk::BackendTalk,
 
+    pub update_df_list: bool,
+    pub required_dataframes: std::collections::HashMap<usize, Option<DataFrame>>,
+    #[serde(skip)]
+    pub get_df_list_promise:
+        Option<Promise<Result<h_analyzer_data::grpc_fs::DataFrameInfoList, tonic::Status>>>,
+
+    pub latest_df_info_map:
+        std::collections::HashMap<usize, h_analyzer_data::grpc_fs::DataFrameInfo>,
+
     pub modal_window_df_key: Option<String>,
-    pub dataframes: HashMap<String, (modal_window::DataFrameInfo, Option<DataFrame>)>,
+    pub dataframes:
+        std::collections::HashMap<String, (modal_window::DataFrameInfo, Option<DataFrame>)>,
     pub current_path: String,
     pub default_path: String,
 
@@ -61,8 +70,14 @@ impl Default for CommonData {
         let wl_promise = backend.get_world_list();
         Self {
             backend: backend,
+
+            update_df_list: true,
+            required_dataframes: std::collections::HashMap::new(),
+            get_df_list_promise: None,
+            latest_df_info_map: std::collections::HashMap::new(),
+
             modal_window_df_key: None,
-            dataframes: HashMap::new(),
+            dataframes: std::collections::HashMap::new(),
             current_path: path.clone(),
             default_path: path.clone(),
 
@@ -102,8 +117,9 @@ impl CommonData {
 
     pub fn save_df_list(&mut self) {
         let mut dfi_list = Vec::new();
-        for (_, (df_info, _)) in self.dataframes.iter() {
+        for (id, (_, (df_info, _))) in self.dataframes.iter().enumerate() {
             dfi_list.push(grpc_fs::DataFrameInfo {
+                id: Some(grpc_fs::DataFrameId { id: id as u32 }),
                 df_path: df_info.filepath.clone(),
                 load_option: Some(df_info.load_option.clone()),
             });
@@ -112,6 +128,31 @@ impl CommonData {
     }
 
     pub fn update(&mut self, selected_world_name: Option<String>) {
+        // retrieve dataframe list update if needed
+        if self.update_df_list {
+            if self.get_df_list_promise.is_none() {
+                self.get_df_list_promise = Some(self.backend.request_get_df_list());
+            }
+            if let Some(get_df_list) = &self.get_df_list_promise {
+                if let Some(get_df_list) = get_df_list.ready() {
+                    if let Ok(latest_df_list) = get_df_list {
+                        for df_info in latest_df_list.list.iter() {
+                            self.latest_df_info_map
+                                .insert(df_info.clone().id.unwrap().id as usize, df_info.clone());
+                        }
+                    }
+                    self.update_df_list = false;
+                    self.get_df_list_promise = None;
+                }
+            }
+        }
+
+        if self.required_dataframes.len() == 0 {
+            self.required_dataframes.insert(2, None);
+        }
+
+        // request sending required dataframe from backend
+
         // world frame update
         let selected_world_name = if let Some(name) = selected_world_name {
             name

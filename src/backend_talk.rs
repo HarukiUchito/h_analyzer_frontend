@@ -95,6 +95,20 @@ impl BackendTalk {
         })
     }
 
+    pub fn request_get_df_list(
+        &self,
+    ) -> Promise<Result<grpc_fs::DataFrameInfoList, tonic::Status>> {
+        let addr = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_fs::polars_service_client::PolarsServiceClient::new(Client::new(addr));
+            let req = grpc_fs::Empty {};
+
+            let resp = query_client.get_data_frame_list(req).await?.into_inner();
+            Ok(resp)
+        })
+    }
+
     pub fn load_df_request(
         &self,
         filepath: String,
