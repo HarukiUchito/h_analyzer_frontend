@@ -146,29 +146,22 @@ impl Explorer {
                                     ui.label(format!("{}", df_info.df_path));
                                     ui.end_row();
 
-                                    ui.label("Availability");
-                                    ui.label(format!(
-                                        "{}",
-                                        common_data
-                                            .required_dataframes
-                                            .get(&(df_info.clone().id.unwrap().id as usize))
-                                            .is_some()
-                                    ));
-                                    ui.end_row();
+                                    if let Some(df_opt) = common_data
+                                        .required_dataframes
+                                        .get(&(df_info.clone().id.unwrap().id as usize))
+                                    {
+                                        ui.label("Availability");
+                                        ui.label(format!("{}", df_opt.is_some()));
+                                        ui.end_row();
+
+                                        if let Some(df) = df_opt {
+                                            ui.label("Shape");
+                                            ui.label(format!("{:?}", df.shape()));
+                                            ui.end_row();
+                                        }
+                                    }
                                 });
                         });
-                    }
-                    for (_, (df_info, df_opt)) in common_data.dataframes.iter() {
-                        let mut checkd = false;
-                        let name = get_filename(&df_info.filepath.as_str());
-                        ui.horizontal(|ui| {
-                            ui.checkbox(&mut checkd, name.clone());
-                            ui.label(df_info.load_state.to_string());
-                            if let Some(df) = df_opt {
-                                ui.label(format!("shape {:?}", df.shape()));
-                            }
-                        });
-                        ui.label(df_info.filepath.to_string());
                     }
                 });
             }

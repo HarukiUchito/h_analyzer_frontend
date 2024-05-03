@@ -137,6 +137,29 @@ impl BackendTalk {
         })
     }
 
+    pub fn get_df_request(
+        &self,
+        id: h_analyzer_data::grpc_fs::DataFrameId,
+    ) -> Promise<Result<DataFrame, tonic::Status>> {
+        let base_url = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client = grpc_fs::polars_service_client::PolarsServiceClient::new(
+                Client::new(base_url.to_string()),
+            );
+
+            let mut stream = query_client.get_data_frame(id).await?.into_inner();
+
+            let mut cvec = Vec::new();
+            while let Some(cdata) = stream.message().await? {
+                for v in cdata.data {
+                    cvec.push(v);
+                }
+            }
+            let df = bincode::deserialize_from(cvec.clone().as_slice()).unwrap_or_default();
+            Ok(df)
+        })
+    }
+
     pub fn get_world_frame(
         &self,
         world_name: String,

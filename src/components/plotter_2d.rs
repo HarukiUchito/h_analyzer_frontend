@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use crate::common_data::{self};
 use crate::components::dataframe_select;
 
@@ -469,29 +471,34 @@ impl Plotter2D {
                 } else {
                     // use dataframe for plotting
                     let df_id = unwrap_or_continue!(unwrap_or_continue!(df_select_iter.next())
-                        .dataframe_key
+                        .dataframe_id
                         .clone());
                     if !s_info.visible {
                         continue;
                     }
                     let local_df = match s_info.source {
-                        SeriesSource::DataFrame => common_data
-                            .dataframes
-                            .get(&df_id)
-                            .map(|df_opt_pair| df_opt_pair.1.as_ref().map(|df_opt| df_opt.clone()))
-                            .unwrap_or_default(),
+                        SeriesSource::DataFrame => Some(
+                            common_data
+                                .required_dataframes
+                                .get(&df_id)
+                                .unwrap()
+                                .clone()
+                                .unwrap_or_default(),
+                        ),
                         SeriesSource::WorldFrame => None,
                     };
                     let mut local_df = unwrap_or_continue!(local_df);
 
                     if self.apply_x_limit {
                         //log::info!("{:?}", self.limit_x_range);
-                        let rt_col = local_df.column("Relative Time[s]").unwrap();
-                        let mask = rt_col.gt(self.limit_x_range.0).unwrap();
-                        local_df = local_df.filter(&mask).unwrap();
-                        let rt_col = local_df.column("Relative Time[s]").unwrap();
-                        let mask = rt_col.lt(self.limit_x_range.1).unwrap();
-                        local_df = local_df.filter(&mask).unwrap();
+                        /*
+                        if let Ok(rt_col) = local_df.column("Relative Time[s]").cloned() {
+                            let mask = rt_col.gt(self.limit_x_range.0).unwrap();
+                            local_df = local_df.filter(&mask).unwrap();
+                            let mask = rt_col.lt(self.limit_x_range.1).unwrap();
+                            local_df = local_df.filter(&mask).unwrap();
+                        }
+                        */
                     }
 
                     let colx = unwrap_or_continue!(&s_info.x_column);

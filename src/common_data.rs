@@ -14,12 +14,14 @@ pub struct CommonData {
 
     pub update_df_list: bool,
     pub required_dataframes: std::collections::HashMap<usize, Option<DataFrame>>,
+    pub latest_df_info_map:
+        std::collections::HashMap<usize, h_analyzer_data::grpc_fs::DataFrameInfo>,
+
     #[serde(skip)]
     pub get_df_list_promise:
         Option<Promise<Result<h_analyzer_data::grpc_fs::DataFrameInfoList, tonic::Status>>>,
-
-    pub latest_df_info_map:
-        std::collections::HashMap<usize, h_analyzer_data::grpc_fs::DataFrameInfo>,
+    #[serde(skip)]
+    pub get_df_promise: Option<(usize, Promise<Result<DataFrame, tonic::Status>>)>,
 
     pub modal_window_df_key: Option<String>,
     pub dataframes:
@@ -74,6 +76,7 @@ impl Default for CommonData {
             update_df_list: true,
             required_dataframes: std::collections::HashMap::new(),
             get_df_list_promise: None,
+            get_df_promise: None,
             latest_df_info_map: std::collections::HashMap::new(),
 
             modal_window_df_key: None,
@@ -147,11 +150,29 @@ impl CommonData {
             }
         }
 
-        if self.required_dataframes.len() == 0 {
-            self.required_dataframes.insert(2, None);
+        // request sending required dataframe from backend
+        for required_df in self.required_dataframes.iter() {
+            let id = *required_df.0;
+            if required_df.1.is_none() && self.get_df_promise.is_none() {
+                self.get_df_promise = Some((
+                    id,
+                    self.backend
+                        .get_df_request(h_analyzer_data::grpc_fs::DataFrameId { id: id as u32 }),
+                ));
+            }
         }
 
-        // request sending required dataframe from backend
+        // check if the dataframe request has completed
+        if let Some(get_df_promise) = &self.get_df_promise {
+            let requested_df_id = get_df_promise.0;
+            if let Some(requested_df) = get_df_promise.1.ready() {
+                if let Ok(requested_df) = requested_df {
+                    *self.required_dataframes.get_mut(&requested_df_id).unwrap() =
+                        Some(requested_df.clone());
+                }
+                self.get_df_promise = None;
+            }
+        }
 
         // world frame update
         let selected_world_name = if let Some(name) = selected_world_name {
