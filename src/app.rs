@@ -1,7 +1,6 @@
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
 use crate::common_data;
-use crate::components::modal_window::{ModalWindow, ModalWindowAction};
 use crate::components::{dataframe_table, explorer, modal_window, plotter_2d};
 use eframe::egui::{self, FontData};
 
@@ -96,7 +95,7 @@ pub struct TemplateApp {
     world_player: WorldPlayer,
 
     #[serde(skip)]
-    modal_window: ModalWindow,
+    modal_window: modal_window::ModalWindow,
 
     #[serde(skip)]
     behavior: TreeBehavior,
@@ -154,7 +153,7 @@ impl Default for TemplateApp {
         Self {
             tree: tree,
             world_player: WorldPlayer::default(),
-            modal_window: ModalWindow::default(),
+            modal_window: modal_window::ModalWindow::default(),
             behavior: TreeBehavior::new(common_data_arc.clone()),
             last_tree_debug: Default::default(),
             explorer: explorer::Explorer::default(),
@@ -296,15 +295,6 @@ impl eframe::App for TemplateApp {
                 }
 
                 egui::widgets::global_dark_light_mode_buttons(ui);
-
-                if ui.button("reset dataframes").clicked() {
-                    let cdata = self.common_data.lock();
-                    if cdata.is_err() {
-                        return;
-                    }
-                    let mut cdata = cdata.unwrap();
-                    cdata.dataframes.clear();
-                }
 
                 if ui.button("save").clicked() {
                     if let Some(storage) = _frame.storage_mut() {

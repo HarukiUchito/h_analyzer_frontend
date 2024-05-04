@@ -2,44 +2,9 @@ use super::dataframe_table;
 use eframe::egui::{self};
 use polars::prelude::*;
 
-#[derive(
-    strum_macros::Display, serde::Deserialize, serde::Serialize, PartialEq, Hash, Clone, Copy,
-)]
-pub enum LoadState {
-    OpenModalWindow,
-    LoadNow,
-    LOADING,
-    LOADED,
-    FAILED,
-    CANCELED,
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone)]
-pub struct DataFrameInfo {
-    pub filepath: String,
-    pub load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption,
-    pub load_state: LoadState,
-}
-
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
 pub struct ModalWindowInput {
     pub filepath: String,
-}
-
-impl DataFrameInfo {
-    pub fn new(fpath: String) -> DataFrameInfo {
-        DataFrameInfo {
-            filepath: fpath,
-            load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption {
-                source_type: h_analyzer_data::grpc_fs::DataFrameSourceType::Csv.into(),
-                has_header: false,
-                skip_row_num_before_header: 0,
-                skip_row_num_after_header: 0,
-                delimiter: ",".to_string(),
-            },
-            load_state: LoadState::OpenModalWindow,
-        }
-    }
 }
 
 pub fn get_filename(fullpath: &str) -> String {
@@ -67,7 +32,13 @@ impl Default for ModalWindow {
     fn default() -> Self {
         Self {
             done: false,
-            load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption::default(),
+            load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption {
+                source_type: h_analyzer_data::grpc_fs::DataFrameSourceType::Csv.into(),
+                has_header: false,
+                skip_row_num_before_header: 0,
+                skip_row_num_after_header: 0,
+                delimiter: ",".to_string(),
+            },
         }
     }
 }

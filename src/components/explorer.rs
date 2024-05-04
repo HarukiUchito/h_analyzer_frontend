@@ -107,12 +107,7 @@ impl Explorer {
                         {
                             let nfp = std::path::Path::new(common_data.current_path.as_str())
                                 .join(filename);
-                            let key = common_data.dataframes.len().to_string().clone();
                             let fullpath = nfp.to_string_lossy().to_string();
-                            common_data.dataframes.insert(
-                                key.clone(),
-                                (modal_window::DataFrameInfo::new(fullpath.clone()), None),
-                            );
                             common_data.modal_window_input_opt =
                                 Some(modal_window::ModalWindowInput { filepath: fullpath });
                         }

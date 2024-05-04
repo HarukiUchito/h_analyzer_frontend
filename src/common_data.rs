@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 use std::collections::VecDeque;
 
 use crate::backend_talk::{self, grpc_data_transfer, grpc_fs};
-use crate::components::modal_window::{self, LoadState};
+use crate::components::modal_window;
 use crate::unwrap_or_continue;
 use polars::prelude::*;
 use poll_promise::Promise;
@@ -29,8 +29,6 @@ pub struct CommonData {
 
     pub modal_window_input_opt: Option<modal_window::ModalWindowInput>,
 
-    pub dataframes:
-        std::collections::HashMap<String, (modal_window::DataFrameInfo, Option<DataFrame>)>,
     pub current_path: String,
     pub default_path: String,
 
@@ -51,12 +49,6 @@ pub struct CommonData {
     pub sl_time_history: std::collections::VecDeque<f64>,
 
     #[serde(skip)]
-    pub init_df_list_promise:
-        Option<Promise<Result<backend_talk::grpc_fs::DataFrameInfoList, tonic::Status>>>,
-    #[serde(skip)]
-    df_to_be_loaded_queue: VecDeque<backend_talk::grpc_fs::DataFrameInfo>,
-
-    #[serde(skip)]
     pub save_df_list_promise: Option<Promise<Result<backend_talk::grpc_fs::Empty, tonic::Status>>>,
     #[serde(skip)]
     pub fs_list_promise:
@@ -71,7 +63,6 @@ impl Default for CommonData {
     fn default() -> Self {
         let path = "/".to_string();
         let backend = backend_talk::BackendTalk::default();
-        let init_df_list_promise = backend.request_initial_df_list();
         let fs_list_promise = backend.request_list(path.clone());
         let d_path_promise = backend.request_default_path();
         let wl_promise = backend.get_world_list();
@@ -87,7 +78,6 @@ impl Default for CommonData {
             just_added_df_id_opt: None,
 
             modal_window_input_opt: None,
-            dataframes: std::collections::HashMap::new(),
             current_path: path.clone(),
             default_path: path.clone(),
 
@@ -100,8 +90,6 @@ impl Default for CommonData {
             series_list_req_time: web_time::Instant::now(),
             sl_time_history: std::collections::VecDeque::new(),
 
-            init_df_list_promise: Some(init_df_list_promise),
-            df_to_be_loaded_queue: VecDeque::new(),
             save_df_list_promise: None,
             fs_list_promise: Some(fs_list_promise),
             load_df_promise: None,
@@ -126,15 +114,7 @@ impl CommonData {
     }
 
     pub fn save_df_list(&mut self) {
-        let mut dfi_list = Vec::new();
-        for (id, (_, (df_info, _))) in self.dataframes.iter().enumerate() {
-            dfi_list.push(grpc_fs::DataFrameInfo {
-                id: Some(grpc_fs::DataFrameId { id: id as u32 }),
-                df_path: df_info.filepath.clone(),
-                load_option: Some(df_info.load_option.clone()),
-            });
-        }
-        self.save_df_list_promise = Some(self.backend.save_df_list(dfi_list));
+        //self.save_df_list_promise = Some(self.backend.save_df_list(dfi_list));
     }
 
     pub fn remove_preview_data_frame(&mut self) {
@@ -283,27 +263,6 @@ impl CommonData {
             }
         }
 
-        // dataframe list update
-        if let Some(init_df_list_promise) = &self.init_df_list_promise {
-            if let Some(init_df_list) = init_df_list_promise.ready() {
-                if let Ok(init_df_list) = init_df_list {
-                    for df_info in init_df_list.list.iter() {
-                        self.df_to_be_loaded_queue.push_back(df_info.clone());
-                    }
-                }
-                self.init_df_list_promise = None;
-            }
-        }
-
-        if let Some(df_to_be_loaded) = self.df_to_be_loaded_queue.pop_front() {
-            let mut df_info = modal_window::DataFrameInfo::new(df_to_be_loaded.df_path);
-            df_info.load_option = df_to_be_loaded.load_option.unwrap();
-            df_info.load_state = modal_window::LoadState::LoadNow;
-            log::info!("enqueue {} {}", self.dataframes.len(), df_info.filepath);
-            self.dataframes
-                .insert(self.dataframes.len().to_string(), (df_info, None));
-        }
-
         // take should not be used in following line because taken promise must be put it back if it's not ready
         if let Some(d_path_promise) = &self.d_path_promise {
             if let Some(d_path) = d_path_promise.ready() {
@@ -317,51 +276,6 @@ impl CommonData {
 
                 self.d_path_promise = None;
             }
-        }
-
-        let recieved = (|| {
-            if let Some((idx, result)) = &self.load_df_promise {
-                if let Some(entry) = self.dataframes.get_mut(&idx.to_string()) {
-                    if let Some(result) = result.ready() {
-                        log::info!("done");
-                        if let Ok(result) = result {
-                            //log::info!("df stored {:?}", result.shape());
-                            //log::info!("{:?}", result);
-                            entry.0.load_state = LoadState::LOADED;
-                            entry.1 = Some(result.clone());
-                            log::info!("assigned to {}", idx);
-                            //log::info!("{:?}", entry.1.clone().unwrap_or_default());
-                        } else {
-                            entry.0.load_state = LoadState::FAILED;
-                            entry.1 = None;
-                        }
-                        return true;
-                    }
-                }
-            }
-            false
-        })();
-        if recieved {
-            self.load_df_promise = None;
-        }
-
-        let mut remove_list = Vec::new();
-        for (idx, (df_info, _)) in self.dataframes.iter_mut() {
-            if df_info.load_state == LoadState::CANCELED {
-                remove_list.push(idx.clone());
-            }
-            if df_info.load_state == LoadState::LoadNow && self.load_df_promise.is_none() {
-                self.load_df_promise = Some((
-                    idx.to_string(),
-                    self.backend
-                        .load_df_request(df_info.filepath.clone(), df_info.load_option.clone()),
-                ));
-                df_info.load_state = LoadState::LOADING;
-                log::info!("evoke {} {}", idx, df_info.filepath);
-            }
-        }
-        for rm_key in remove_list.iter() {
-            self.dataframes.remove(rm_key);
         }
     }
 }

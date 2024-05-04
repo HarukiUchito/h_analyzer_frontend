@@ -78,23 +78,6 @@ impl BackendTalk {
         })
     }
 
-    pub fn request_initial_df_list(
-        &self,
-    ) -> Promise<Result<grpc_fs::DataFrameInfoList, tonic::Status>> {
-        let addr = self.server_address.clone();
-        Promise::spawn_local(async move {
-            let mut query_client =
-                grpc_fs::polars_service_client::PolarsServiceClient::new(Client::new(addr));
-            let req = grpc_fs::Empty {};
-
-            let resp = query_client
-                .initial_data_frame_list(req)
-                .await?
-                .into_inner();
-            Ok(resp)
-        })
-    }
-
     pub fn request_get_df_list(
         &self,
     ) -> Promise<Result<grpc_fs::DataFrameInfoList, tonic::Status>> {
@@ -128,34 +111,6 @@ impl BackendTalk {
                 .await?
                 .into_inner();
             Ok(resp.id as usize)
-        })
-    }
-
-    pub fn load_df_request(
-        &self,
-        filepath: String,
-        load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption,
-    ) -> Promise<Result<DataFrame, tonic::Status>> {
-        let base_url = self.server_address.clone();
-        Promise::spawn_local(async move {
-            let mut query_client = grpc_fs::polars_service_client::PolarsServiceClient::new(
-                Client::new(base_url.to_string()),
-            );
-
-            let req = grpc_fs::FileLoadRequest {
-                filename: filepath,
-                load_option: Some(load_option),
-            };
-            let mut stream = query_client.load_data_frame(req).await?.into_inner();
-
-            let mut cvec = Vec::new();
-            while let Some(cdata) = stream.message().await? {
-                for v in cdata.data {
-                    cvec.push(v);
-                }
-            }
-            let df = bincode::deserialize_from(cvec.clone().as_slice()).unwrap_or_default();
-            Ok(df)
         })
     }
 
