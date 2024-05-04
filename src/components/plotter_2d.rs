@@ -481,7 +481,7 @@ impl Plotter2D {
                             common_data
                                 .required_dataframes
                                 .get(&df_id)
-                                .unwrap()
+                                .unwrap_or(&None)
                                 .clone()
                                 .unwrap_or_default(),
                         ),

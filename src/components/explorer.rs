@@ -132,36 +132,41 @@ impl Explorer {
             ExplorerTab::DATAFRAME => {
                 egui::ScrollArea::both().show(ui, |ui| {
                     for (id, df_info) in common_data.latest_df_info_map.iter() {
-                        ui.collapsing(get_filename(&df_info.df_path), |ui| {
-                            egui::Grid::new("colors")
-                                .num_columns(2)
-                                .spacing([12.0, 8.0])
-                                .striped(true)
-                                .show(ui, |ui| {
-                                    ui.label("ID");
-                                    ui.label(format!("{}", id));
-                                    ui.end_row();
-
-                                    ui.label("FilePath");
-                                    ui.label(format!("{}", df_info.df_path));
-                                    ui.end_row();
-
-                                    if let Some(df_opt) = common_data
-                                        .required_dataframes
-                                        .get(&(df_info.clone().id.unwrap().id as usize))
-                                    {
-                                        ui.label("Availability");
-                                        ui.label(format!("{}", df_opt.is_some()));
-                                        ui.end_row();
-
-                                        if let Some(df) = df_opt {
-                                            ui.label("Shape");
-                                            ui.label(format!("{:?}", df.shape()));
+                        ui.push_id(
+                            format!("df_list_{}", df_info.clone().id.unwrap().id),
+                            |ui| {
+                                ui.collapsing(get_filename(&df_info.df_path), |ui| {
+                                    egui::Grid::new("colors")
+                                        .num_columns(2)
+                                        .spacing([12.0, 8.0])
+                                        .striped(true)
+                                        .show(ui, |ui| {
+                                            ui.label("ID");
+                                            ui.label(format!("{}", id));
                                             ui.end_row();
-                                        }
-                                    }
+
+                                            ui.label("FilePath");
+                                            ui.label(format!("{}", df_info.df_path));
+                                            ui.end_row();
+
+                                            if let Some(df_opt) = common_data
+                                                .required_dataframes
+                                                .get(&(df_info.clone().id.unwrap().id as usize))
+                                            {
+                                                ui.label("Availability");
+                                                ui.label(format!("{}", df_opt.is_some()));
+                                                ui.end_row();
+
+                                                if let Some(df) = df_opt {
+                                                    ui.label("Shape");
+                                                    ui.label(format!("{:?}", df.shape()));
+                                                    ui.end_row();
+                                                }
+                                            }
+                                        });
                                 });
-                        });
+                            },
+                        );
                     }
                 });
             }

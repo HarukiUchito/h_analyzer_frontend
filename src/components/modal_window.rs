@@ -1,3 +1,5 @@
+use crate::common_data;
+
 use super::dataframe_table;
 use eframe::egui::{self};
 use polars::prelude::*;
@@ -43,6 +45,14 @@ pub fn get_filename(fullpath: &str) -> String {
     name
 }
 
+#[derive(PartialEq)]
+pub enum ModalWindowAction {
+    Nothing,
+    Preview,
+    Load,
+    Cancel,
+}
+
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct ModalWindow {
@@ -62,7 +72,9 @@ impl ModalWindow {
         df_info: &mut DataFrameInfo,
         df_opt: &Option<DataFrame>,
         still_open: &mut bool,
-    ) {
+        load_now: &mut bool,
+    ) -> ModalWindowAction {
+        let mut action = ModalWindowAction::Nothing;
         *still_open = true;
         egui::Window::new("File Load Options")
             //                .open(&mut self.modal_window_open)
@@ -123,13 +135,18 @@ impl ModalWindow {
                         if ui.button("Load File").clicked() {
                             df_info.load_state = LoadState::LoadNow;
                             *still_open = false;
+                            *load_now = true;
+                            action = ModalWindowAction::Load;
                         }
                         if ui.button("Preview").clicked() {
                             df_info.load_state = LoadState::LoadNow;
+                            *load_now = true;
+                            action = ModalWindowAction::Preview;
                         }
                         if ui.button("Cancel").clicked() {
                             df_info.load_state = LoadState::CANCELED;
                             *still_open = false;
+                            action = ModalWindowAction::Cancel;
                         }
                     });
                     ui.end_row();
@@ -138,5 +155,6 @@ impl ModalWindow {
                     }
                 });
             });
+        action
     }
 }

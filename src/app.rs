@@ -1,7 +1,7 @@
 //use egui_plotter::EguiBackend;
 //use plotters::prelude::*;
 use crate::common_data;
-use crate::components::modal_window::ModalWindow;
+use crate::components::modal_window::{ModalWindow, ModalWindowAction};
 use crate::components::{dataframe_table, explorer, modal_window, plotter_2d};
 use eframe::egui::{self, FontData};
 
@@ -253,15 +253,39 @@ impl eframe::App for TemplateApp {
             //
             // View update
             //
-            if let Some(key) = &cdata.modal_window_df_key.clone() {
+            let preview_df = cdata.get_just_loaded_data_frame();
+            let (m_action, df_info_to_load) = if let Some(key) = &cdata.modal_window_df_key.clone()
+            {
                 let (df_info, loaded) = cdata.dataframes.get_mut(key).unwrap();
                 let mut still_open = false;
-                self.modal_window
-                    .show(ctx, df_info, loaded, &mut still_open);
+                let mut load_now = false;
+                let df_info_cp = df_info.clone();
+                let action = self.modal_window.show(
+                    ctx,
+                    df_info,
+                    &preview_df,
+                    &mut still_open,
+                    &mut load_now,
+                );
                 if !still_open {
                     cdata.modal_window_df_key = None;
                 }
                 opening_modal_window = true;
+                if load_now {
+                    (action, Some(df_info_cp))
+                } else {
+                    (action, None)
+                }
+            } else {
+                (modal_window::ModalWindowAction::Nothing, None)
+            };
+            if m_action == modal_window::ModalWindowAction::Preview {
+                if let Some(df_info) = df_info_to_load {
+                    cdata.load_data_frame_from_file(&df_info);
+                }
+            }
+            if m_action == modal_window::ModalWindowAction::Cancel {
+                cdata.remove_preview_data_frame();
             }
         }
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {

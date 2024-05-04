@@ -109,6 +109,28 @@ impl BackendTalk {
         })
     }
 
+    pub fn load_df_from_file_request(
+        &self,
+        filepath: String,
+        load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption,
+    ) -> Promise<Result<usize, tonic::Status>> {
+        let addr = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_fs::polars_service_client::PolarsServiceClient::new(Client::new(addr));
+            let req = grpc_fs::FileLoadRequest {
+                filename: filepath,
+                load_option: Some(load_option),
+            };
+
+            let resp = query_client
+                .load_data_frame_from_file(req)
+                .await?
+                .into_inner();
+            Ok(resp.id as usize)
+        })
+    }
+
     pub fn load_df_request(
         &self,
         filepath: String,
@@ -134,6 +156,20 @@ impl BackendTalk {
             }
             let df = bincode::deserialize_from(cvec.clone().as_slice()).unwrap_or_default();
             Ok(df)
+        })
+    }
+
+    pub fn remove_df_request(
+        &self,
+        id: h_analyzer_data::grpc_fs::DataFrameId,
+    ) -> Promise<Result<h_analyzer_data::grpc_fs::Empty, tonic::Status>> {
+        let base_url = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client = grpc_fs::polars_service_client::PolarsServiceClient::new(
+                Client::new(base_url.to_string()),
+            );
+
+            Ok(query_client.remove_data_frame(id).await?.into_inner())
         })
     }
 

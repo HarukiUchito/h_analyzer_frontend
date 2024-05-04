@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::collections::VecDeque;
 
 use crate::backend_talk::{self, grpc_data_transfer, grpc_fs};
@@ -16,12 +17,15 @@ pub struct CommonData {
     pub required_dataframes: std::collections::HashMap<usize, Option<DataFrame>>,
     pub latest_df_info_map:
         std::collections::HashMap<usize, h_analyzer_data::grpc_fs::DataFrameInfo>,
+    pub just_added_df_id_opt: Option<usize>,
 
     #[serde(skip)]
     pub get_df_list_promise:
         Option<Promise<Result<h_analyzer_data::grpc_fs::DataFrameInfoList, tonic::Status>>>,
     #[serde(skip)]
     pub get_df_promise: Option<(usize, Promise<Result<DataFrame, tonic::Status>>)>,
+    #[serde(skip)]
+    pub get_df_from_file_promise: Option<Promise<Result<usize, tonic::Status>>>,
 
     pub modal_window_df_key: Option<String>,
     pub dataframes:
@@ -77,7 +81,9 @@ impl Default for CommonData {
             required_dataframes: std::collections::HashMap::new(),
             get_df_list_promise: None,
             get_df_promise: None,
+            get_df_from_file_promise: None,
             latest_df_info_map: std::collections::HashMap::new(),
+            just_added_df_id_opt: None,
 
             modal_window_df_key: None,
             dataframes: std::collections::HashMap::new(),
@@ -130,6 +136,44 @@ impl CommonData {
         self.save_df_list_promise = Some(self.backend.save_df_list(dfi_list));
     }
 
+    pub fn remove_preview_data_frame(&mut self) {
+        if let Some(df_id) = self.just_added_df_id_opt {
+            let _ = self
+                .backend
+                .remove_df_request(h_analyzer_data::grpc_fs::DataFrameId { id: df_id as u32 });
+            self.just_added_df_id_opt = None;
+            self.update_df_list = true;
+        }
+    }
+
+    pub fn load_data_frame_from_file(&mut self, df_info: &modal_window::DataFrameInfo) {
+        self.get_df_from_file_promise = Some(
+            self.backend
+                .load_df_from_file_request(df_info.filepath.clone(), df_info.load_option.clone()),
+        );
+        self.update_df_list = true;
+    }
+
+    pub fn request_df_transmission(&mut self, df_id: usize) {
+        let rdf = self.required_dataframes.borrow_mut();
+        if rdf.get(&df_id).is_none() && !rdf.contains_key(&df_id) {
+            rdf.insert(df_id, None);
+        }
+    }
+
+    pub fn get_just_loaded_data_frame(&mut self) -> Option<DataFrame> {
+        if let Ok(id) = self.get_df_from_file_promise.as_ref()?.ready()? {
+            self.just_added_df_id_opt = Some(id.clone());
+            self.get_df_from_file_promise = None;
+        }
+        if let Some(just_added_df_id) = self.just_added_df_id_opt {
+            self.request_df_transmission(just_added_df_id);
+            self.required_dataframes.get(&just_added_df_id)?.clone()
+        } else {
+            None
+        }
+    }
+
     pub fn update(&mut self, selected_world_name: Option<String>) {
         // retrieve dataframe list update if needed
         if self.update_df_list {
@@ -139,6 +183,7 @@ impl CommonData {
             if let Some(get_df_list) = &self.get_df_list_promise {
                 if let Some(get_df_list) = get_df_list.ready() {
                     if let Ok(latest_df_list) = get_df_list {
+                        self.latest_df_info_map.clear();
                         for df_info in latest_df_list.list.iter() {
                             self.latest_df_info_map
                                 .insert(df_info.clone().id.unwrap().id as usize, df_info.clone());

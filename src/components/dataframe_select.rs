@@ -1,4 +1,4 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::BorrowMut;
 
 use crate::common_data;
 use eframe::egui;
@@ -27,7 +27,7 @@ impl DataFrameSelect {
         let df_id = self.dataframe_id.clone().unwrap_or(1);
         ui.push_id(format!("df_select_{}", idx), |ui| {
             ui.horizontal(|ui| -> Option<()> {
-                if common_data.dataframes.len() == 0 {
+                if common_data.latest_df_info_map.len() == 0 {
                     ui.label("Load DataFrame");
                 } else {
                     let df_info = common_data.latest_df_info_map.get(&df_id).clone().unwrap();
@@ -49,11 +49,8 @@ impl DataFrameSelect {
         });
 
         // request if the df is not available
-        let rdf = common_data.required_dataframes.borrow_mut();
-        if rdf.get(&df_id).is_none() && !rdf.contains_key(&df_id) {
-            rdf.insert(df_id, None);
-        }
+        common_data.request_df_transmission(df_id);
 
-        Some(rdf.get_mut(&df_id)?.as_mut()?)
+        Some(common_data.required_dataframes.get_mut(&df_id)?.as_mut()?)
     }
 }
