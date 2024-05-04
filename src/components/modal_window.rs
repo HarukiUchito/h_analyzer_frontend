@@ -1,5 +1,3 @@
-use crate::common_data;
-
 use super::dataframe_table;
 use eframe::egui::{self};
 use polars::prelude::*;
@@ -21,6 +19,11 @@ pub struct DataFrameInfo {
     pub filepath: String,
     pub load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption,
     pub load_state: LoadState,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
+pub struct ModalWindowInput {
+    pub filepath: String,
 }
 
 impl DataFrameInfo {
@@ -45,7 +48,7 @@ pub fn get_filename(fullpath: &str) -> String {
     name
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, serde::Deserialize, serde::Serialize, Clone)]
 pub enum ModalWindowAction {
     Nothing,
     Preview,
@@ -57,23 +60,34 @@ pub enum ModalWindowAction {
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct ModalWindow {
     done: bool,
+    load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption,
 }
 
 impl Default for ModalWindow {
     fn default() -> Self {
-        Self { done: false }
+        Self {
+            done: false,
+            load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption::default(),
+        }
     }
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
+pub struct ModalWindowOutput {
+    pub action: ModalWindowAction,
+    pub filepath: String,
+    pub load_option: h_analyzer_data::grpc_fs::DataFrameLoadOption,
 }
 
 impl ModalWindow {
     pub fn show(
         &mut self,
         ctx: &egui::Context,
-        df_info: &mut DataFrameInfo,
+        filepath: String,
         df_opt: &Option<DataFrame>,
         still_open: &mut bool,
         load_now: &mut bool,
-    ) -> ModalWindowAction {
+    ) -> ModalWindowOutput {
         let mut action = ModalWindowAction::Nothing;
         *still_open = true;
         egui::Window::new("File Load Options")
@@ -81,7 +95,7 @@ impl ModalWindow {
             .anchor(egui::Align2::CENTER_TOP, egui::Vec2::new(0.0, 100.0))
             .show(ctx, |ui| {
                 egui::Grid::new("settings").show(ui, |ui| {
-                    let name = get_filename(df_info.filepath.as_str());
+                    let name = get_filename(filepath.as_str());
                     ui.horizontal(|ui| {
                         ui.label("Filename:");
                         ui.label(name.clone());
@@ -91,19 +105,19 @@ impl ModalWindow {
                     ui.horizontal(|ui| {
                         ui.label("Data Source Type:");
                         ui.selectable_value(
-                            &mut df_info.load_option.source_type,
+                            &mut self.load_option.source_type,
                             h_analyzer_data::grpc_fs::DataFrameSourceType::Csv as i32,
                             "CSV",
                         );
                         ui.selectable_value(
-                            &mut df_info.load_option.source_type,
+                            &mut self.load_option.source_type,
                             h_analyzer_data::grpc_fs::DataFrameSourceType::Rosbag2 as i32,
                             "ROSBAG2",
                         );
                     });
                     ui.end_row();
 
-                    if df_info.load_option.source_type
+                    if self.load_option.source_type
                         == h_analyzer_data::grpc_fs::DataFrameSourceType::Csv as i32
                     {
                         ui.horizontal(|ui| {
@@ -111,21 +125,21 @@ impl ModalWindow {
                             ui.horizontal(|ui| {
                                 ui.label("numer of rows to skip before header");
                                 ui.add(egui::DragValue::new(
-                                    &mut df_info.load_option.skip_row_num_before_header,
+                                    &mut self.load_option.skip_row_num_before_header,
                                 ));
                             });
                         });
                         ui.end_row();
 
                         ui.horizontal(|ui| {
-                            ui.checkbox(&mut df_info.load_option.has_header, "has_header");
+                            ui.checkbox(&mut self.load_option.has_header, "has_header");
                         });
                         ui.end_row();
 
                         ui.horizontal(|ui| {
                             ui.label("numer of rows to skip after header");
                             ui.add(egui::DragValue::new(
-                                &mut df_info.load_option.skip_row_num_after_header,
+                                &mut self.load_option.skip_row_num_after_header,
                             ));
                         });
                         ui.end_row();
@@ -133,18 +147,15 @@ impl ModalWindow {
 
                     ui.horizontal(|ui| {
                         if ui.button("Load File").clicked() {
-                            df_info.load_state = LoadState::LoadNow;
                             *still_open = false;
                             *load_now = true;
                             action = ModalWindowAction::Load;
                         }
                         if ui.button("Preview").clicked() {
-                            df_info.load_state = LoadState::LoadNow;
                             *load_now = true;
                             action = ModalWindowAction::Preview;
                         }
                         if ui.button("Cancel").clicked() {
-                            df_info.load_state = LoadState::CANCELED;
                             *still_open = false;
                             action = ModalWindowAction::Cancel;
                         }
@@ -155,6 +166,10 @@ impl ModalWindow {
                     }
                 });
             });
-        action
+        ModalWindowOutput {
+            action: action,
+            filepath: filepath,
+            load_option: self.load_option.clone(),
+        }
     }
 }

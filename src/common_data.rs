@@ -27,7 +27,8 @@ pub struct CommonData {
     #[serde(skip)]
     pub get_df_from_file_promise: Option<Promise<Result<usize, tonic::Status>>>,
 
-    pub modal_window_df_key: Option<String>,
+    pub modal_window_input_opt: Option<modal_window::ModalWindowInput>,
+
     pub dataframes:
         std::collections::HashMap<String, (modal_window::DataFrameInfo, Option<DataFrame>)>,
     pub current_path: String,
@@ -85,7 +86,7 @@ impl Default for CommonData {
             latest_df_info_map: std::collections::HashMap::new(),
             just_added_df_id_opt: None,
 
-            modal_window_df_key: None,
+            modal_window_input_opt: None,
             dataframes: std::collections::HashMap::new(),
             current_path: path.clone(),
             default_path: path.clone(),
@@ -146,10 +147,14 @@ impl CommonData {
         }
     }
 
-    pub fn load_data_frame_from_file(&mut self, df_info: &modal_window::DataFrameInfo) {
+    pub fn load_data_frame_from_file(
+        &mut self,
+        filepath: &String,
+        load_option: &h_analyzer_data::grpc_fs::DataFrameLoadOption,
+    ) {
         self.get_df_from_file_promise = Some(
             self.backend
-                .load_df_from_file_request(df_info.filepath.clone(), df_info.load_option.clone()),
+                .load_df_from_file_request(filepath.clone(), load_option.clone()),
         );
         self.update_df_list = true;
     }

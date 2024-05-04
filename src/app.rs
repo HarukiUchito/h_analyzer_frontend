@@ -254,38 +254,31 @@ impl eframe::App for TemplateApp {
             // View update
             //
             let preview_df = cdata.get_just_loaded_data_frame();
-            let (m_action, df_info_to_load) = if let Some(key) = &cdata.modal_window_df_key.clone()
-            {
-                let (df_info, loaded) = cdata.dataframes.get_mut(key).unwrap();
+            let m_output = if let Some(modal_window_input) = &cdata.modal_window_input_opt.clone() {
                 let mut still_open = false;
                 let mut load_now = false;
-                let df_info_cp = df_info.clone();
-                let action = self.modal_window.show(
+                let m_output = self.modal_window.show(
                     ctx,
-                    df_info,
+                    modal_window_input.filepath.clone(),
                     &preview_df,
                     &mut still_open,
                     &mut load_now,
                 );
                 if !still_open {
-                    cdata.modal_window_df_key = None;
+                    cdata.modal_window_input_opt = None;
                 }
                 opening_modal_window = true;
-                if load_now {
-                    (action, Some(df_info_cp))
-                } else {
-                    (action, None)
-                }
+                Some(m_output)
             } else {
-                (modal_window::ModalWindowAction::Nothing, None)
+                None
             };
-            if m_action == modal_window::ModalWindowAction::Preview {
-                if let Some(df_info) = df_info_to_load {
-                    cdata.load_data_frame_from_file(&df_info);
+            if let Some(m_output) = m_output {
+                if m_output.action == modal_window::ModalWindowAction::Preview {
+                    cdata.load_data_frame_from_file(&m_output.filepath, &m_output.load_option);
                 }
-            }
-            if m_action == modal_window::ModalWindowAction::Cancel {
-                cdata.remove_preview_data_frame();
+                if m_output.action == modal_window::ModalWindowAction::Cancel {
+                    cdata.remove_preview_data_frame();
+                }
             }
         }
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {

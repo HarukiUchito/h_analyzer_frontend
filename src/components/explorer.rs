@@ -111,9 +111,10 @@ impl Explorer {
                             let fullpath = nfp.to_string_lossy().to_string();
                             common_data.dataframes.insert(
                                 key.clone(),
-                                (modal_window::DataFrameInfo::new(fullpath), None),
+                                (modal_window::DataFrameInfo::new(fullpath.clone()), None),
                             );
-                            common_data.modal_window_df_key = Some(key);
+                            common_data.modal_window_input_opt =
+                                Some(modal_window::ModalWindowInput { filepath: fullpath });
                         }
                     }
 
