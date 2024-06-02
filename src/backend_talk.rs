@@ -17,6 +17,21 @@ impl BackendTalk {
         }
     }
 
+    pub fn load_rosbag2(&self, dirpath: String) -> Promise<Result<grpc_fs::Empty, tonic::Status>> {
+        let addr = self.server_address.clone();
+        Promise::spawn_local(async move {
+            let mut query_client =
+                grpc_fs::polars_service_client::PolarsServiceClient::new(Client::new(addr));
+
+            let req = grpc_fs::PathMessage {
+                path: dirpath.clone(),
+            };
+
+            let resp = query_client.load_rosbag2(req).await?.into_inner();
+            Ok(resp)
+        })
+    }
+
     pub fn get_world_list(
         &self,
     ) -> Promise<Result<grpc_data_transfer::WorldMetadataList, tonic::Status>> {

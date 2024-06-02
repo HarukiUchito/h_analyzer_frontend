@@ -8,6 +8,7 @@ use super::modal_window::get_filename;
 enum ExplorerTab {
     FILESYSTEM,
     DATAFRAME,
+    ROSBAG,
 }
 
 #[derive(Clone, PartialEq)]
@@ -41,6 +42,7 @@ impl Explorer {
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.explorer_tab, ExplorerTab::FILESYSTEM, "Files");
             ui.selectable_value(&mut self.explorer_tab, ExplorerTab::DATAFRAME, "DataFrames");
+            ui.selectable_value(&mut self.explorer_tab, ExplorerTab::ROSBAG, "Rosbags");
         });
 
         ui.separator();
@@ -57,6 +59,8 @@ impl Explorer {
 
                 ui.separator();
 
+                let mut n_selected_dir = 0;
+                let mut selected_dir = None;
                 egui::ScrollArea::both().show(ui, |ui| -> Option<()> {
                     let mut update_list = false;
                     let promise = common_data.fs_list_promise.as_ref()?;
@@ -89,15 +93,22 @@ impl Explorer {
                         }
                     }
 
+                    // for each directory entry
                     for dirname in fs_list.directories.iter() {
-                        if ui
-                            .checkbox(&mut self.checked_map.get_mut(dirname).unwrap(), dirname)
-                            .double_clicked()
-                        {
+                        let c_box =
+                            ui.checkbox(&mut self.checked_map.get_mut(dirname).unwrap(), dirname);
+                        if c_box.double_clicked() {
                             let nfp = std::path::Path::new(common_data.current_path.as_str())
                                 .join(dirname);
                             common_data.current_path = nfp.to_string_lossy().into_owned();
                             update_list = true;
+                        }
+                        if *self.checked_map.get(dirname).unwrap() {
+                            // if selected
+                            n_selected_dir += 1;
+                            let nfp = std::path::Path::new(common_data.current_path.as_str())
+                                .join(dirname);
+                            selected_dir = Some(nfp.to_string_lossy().to_string().clone());
                         }
                     }
                     for filename in fsvec.iter() {
@@ -123,7 +134,11 @@ impl Explorer {
                     None
                 });
                 ui.separator();
-                ui.button("Load as ROSBAG2");
+                if ui.button("Load as ROSBAG2").clicked() {
+                    if n_selected_dir == 1 {
+                        common_data.load_rosbag2(selected_dir.unwrap());
+                    }
+                }
             }
             ExplorerTab::DATAFRAME => {
                 egui::ScrollArea::both().show(ui, |ui| {
@@ -166,6 +181,7 @@ impl Explorer {
                     }
                 });
             }
+            ExplorerTab::ROSBAG => {}
         }
     }
 }

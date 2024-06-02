@@ -20,6 +20,9 @@ pub struct CommonData {
     pub just_added_df_id_opt: Option<usize>,
 
     #[serde(skip)]
+    load_rosbag_promise: Option<Promise<Result<grpc_fs::Empty, tonic::Status>>>,
+
+    #[serde(skip)]
     pub get_df_list_promise:
         Option<Promise<Result<h_analyzer_data::grpc_fs::DataFrameInfoList, tonic::Status>>>,
     #[serde(skip)]
@@ -77,6 +80,8 @@ impl Default for CommonData {
             latest_df_info_map: std::collections::HashMap::new(),
             just_added_df_id_opt: None,
 
+            load_rosbag_promise: None,
+
             modal_window_input_opt: None,
             current_path: path.clone(),
             default_path: path.clone(),
@@ -99,6 +104,10 @@ impl Default for CommonData {
 }
 
 impl CommonData {
+    pub fn load_rosbag2(&mut self, dirpath: String) {
+        self.load_rosbag_promise = Some(self.backend.load_rosbag2(dirpath));
+    }
+
     pub fn update_world_list(&mut self) {
         self.world_list_promise = Some(self.backend.get_world_list());
     }
