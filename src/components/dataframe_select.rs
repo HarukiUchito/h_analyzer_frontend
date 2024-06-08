@@ -30,7 +30,7 @@ impl DataFrameSelect {
                 if common_data.latest_df_info_map.len() == 0 {
                     ui.label("Load DataFrame");
                 } else {
-                    let df_info = common_data.latest_df_info_map.get(&df_id).clone().unwrap();
+                    let df_info = common_data.latest_df_info_map.get(&df_id).clone()?;
                     let fname = get_filename(df_info.df_path.as_str());
                     ui.label("Select DataFrame");
                     egui::ComboBox::from_label("")

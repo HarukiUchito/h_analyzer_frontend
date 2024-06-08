@@ -38,6 +38,7 @@ impl Default for ModalWindow {
                 skip_row_num_before_header: 0,
                 skip_row_num_after_header: 0,
                 delimiter: ",".to_string(),
+                updated: false,
             },
         }
     }

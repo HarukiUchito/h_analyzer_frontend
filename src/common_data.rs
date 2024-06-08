@@ -13,6 +13,7 @@ pub struct CommonData {
     #[serde(skip)]
     pub backend: backend_talk::BackendTalk,
 
+    pub update_df_count: usize,
     pub update_df_list: bool,
     pub required_dataframes: std::collections::HashMap<usize, Option<DataFrame>>,
     pub latest_df_info_map:
@@ -72,6 +73,7 @@ impl Default for CommonData {
         Self {
             backend: backend,
 
+            update_df_count: 0,
             update_df_list: true,
             required_dataframes: std::collections::HashMap::new(),
             get_df_list_promise: None,
@@ -169,6 +171,12 @@ impl CommonData {
     }
 
     pub fn update(&mut self, selected_world_name: Option<String>) {
+        if self.update_df_count > 50 {
+            self.update_df_list = true;
+            self.update_df_count = 0;
+        } else {
+            self.update_df_count += 1;
+        }
         // retrieve dataframe list update if needed
         if self.update_df_list {
             if self.get_df_list_promise.is_none() {
@@ -181,6 +189,11 @@ impl CommonData {
                         for df_info in latest_df_list.list.iter() {
                             self.latest_df_info_map
                                 .insert(df_info.clone().id.unwrap().id as usize, df_info.clone());
+                            log::info!("{:?}", df_info);
+                            if df_info.load_option.as_ref().unwrap().updated {
+                                self.required_dataframes
+                                    .remove(&(df_info.id.as_ref().unwrap().id as usize));
+                            }
                         }
                     }
                     self.update_df_list = false;
